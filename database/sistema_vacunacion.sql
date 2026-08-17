@@ -2,8 +2,7 @@
 -- Sistema de Vacunación - Script de creación de BD (v2)
 -- Motor: SQLite
 -- APLICACION pasa a completarse con datos provenientes del CSV del SISA .
--- y se relaciona
--- con LOTE  y con VACUNATORIO por nombre.
+-- y se relaciona con LOTE  y con VACUNATORIO por nombre.
 -- =====================================================
 
 PRAGMA foreign_keys = ON;
@@ -13,7 +12,7 @@ PRAGMA foreign_keys = ON;
 -- =====================================================
 CREATE TABLE VACUNATORIO (
     id_vacunatorio  INTEGER PRIMARY KEY AUTOINCREMENT,
-    nombre          TEXT NOT NULL UNIQUE,   -- UNIQUE: el CSV matchea por nombre exacto
+    nombre          TEXT NOT NULL UNIQUE,   -- UNIQUE: nombre exacto que viene del CSV del SISA
     direccion       TEXT NOT NULL,
     telefono        TEXT,
     es_central      INTEGER NOT NULL DEFAULT 0 CHECK (es_central IN (0,1))
@@ -33,7 +32,7 @@ CREATE TABLE USUARIO (
 );
 
 -- =====================================================
--- VACUNA (catálogo dinámico)
+-- VACUNA (carga dinámica)
 -- =====================================================
 CREATE TABLE VACUNA (
     id_vacuna           INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -100,7 +99,7 @@ CREATE TABLE TRANSFERENCIA_DETALLE (
 
 -- =====================================================
 -- APLICACION
--- Poblada por importación del CSV del Registro Federal de
+-- se completa por importación del CSV del Registro Federal de
 -- Vacunación Nominalizado (SISA). id_lote puede quedar NULL
 -- si el número de lote del CSV no coincide con ningún LOTE
 -- cargado en el sistema.
@@ -117,7 +116,7 @@ CREATE TABLE APLICACION (
     id_vacunatorio      INTEGER NOT NULL,
     region_sanitaria    TEXT,
     departamento        TEXT,
-    id_lote             INTEGER,         -- NULL si el lote del CSV no matchea
+    id_lote             INTEGER,         -- NULL si el número de lote del CSV no coincide con ningún LOTE cargado en el sistema
     tipo_edad           TEXT,
     edad                INTEGER,
     fecha_registro      TEXT,
@@ -128,7 +127,7 @@ CREATE TABLE APLICACION (
 );
 
 -- =====================================================
--- Índices recomendados para consultas frecuentes
+-- Índices  para consultas frecuentes
 -- =====================================================
 CREATE INDEX idx_lote_vacuna ON LOTE(id_vacuna);
 CREATE INDEX idx_ampolla_vacunatorio ON AMPOLLA(id_vacunatorio_actual);
