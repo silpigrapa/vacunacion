@@ -40,6 +40,20 @@ def obtener_vacunatorio_por_id(id_vacunatorio):
     return fila
 
 
+def obtener_vacunatorio_por_nombre(nombre):
+    """
+    Busca un vacunatorio por su nombre exacto. Se usa durante la
+    importación del CSV para relacionar la columna 'Establecimiento'
+    del archivo con un vacunatorio cargado en el sistema.
+    """
+    conexion = obtener_conexion()
+    cursor = conexion.cursor()
+    cursor.execute("SELECT * FROM VACUNATORIO WHERE nombre = ?", (nombre,))
+    fila = cursor.fetchone()
+    conexion.close()
+    return fila
+
+
 def listar_vacunatorios():
     """
     Devuelve la lista de todos los vacunatorios, ordenados por nombre.
