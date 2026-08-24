@@ -1,29 +1,21 @@
 """
 Pantalla de login del Sistema de Vacunación.
+
 """
 
 import customtkinter as ctk
 from modelos.usuario import validar_login
 
-ctk.set_appearance_mode("system")       # "light", "dark" o "system"
-ctk.set_default_color_theme("blue")
 
-
-class VentanaLogin(ctk.CTk):
-    def __init__(self, al_loguear_exitoso):
+class FrameLogin(ctk.CTkFrame):
+    def __init__(self, master, al_loguear_exitoso):
         """
+        master: la ventana raíz (App) donde se monta este frame.
         al_loguear_exitoso: función callback que se llama con el usuario
-        logueado (sqlite3.Row) cuando el login es correcto. Ahí es donde
-        se abre la ventana principal del sistema.
+        logueado (sqlite3.Row) cuando el login es correcto.
         """
-        super().__init__()
-
+        super().__init__(master)
         self.al_loguear_exitoso = al_loguear_exitoso
-
-        self.title("Sistema de Vacunación - Ingreso")
-        self.geometry("380x320")
-        self.resizable(False, False)
-
         self._construir_widgets()
 
     def _construir_widgets(self):
@@ -68,15 +60,6 @@ class VentanaLogin(ctk.CTk):
             self.campo_contrasena.delete(0, "end")
             return
 
-        # Login correcto: cerramos esta ventana y avisamos al callback
-        self.destroy()
+        # Login correcto: avisamos al callback, que se encarga de
+        # cambiar de pantalla (no destruimos ninguna ventana acá).
         self.al_loguear_exitoso(usuario_encontrado)
-
-
-if __name__ == "__main__":
-    # Prueba manual de la pantalla, sin ventana principal real todavía
-    def usuario_logueado(usuario_row):
-        print(f"Login OK: {usuario_row['nombre']} {usuario_row['apellido']}")
-
-    app = VentanaLogin(al_loguear_exitoso=usuario_logueado)
-    app.mainloop()
