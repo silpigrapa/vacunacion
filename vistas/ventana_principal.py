@@ -4,6 +4,7 @@ Se abre después de un login exitoso.
 """
 
 import customtkinter as ctk
+from vistas.transferencias import VistaTransferencias
 
 ctk.set_appearance_mode("system")
 ctk.set_default_color_theme("blue")
@@ -20,7 +21,7 @@ class VentanaPrincipal(ctk.CTk):
         self.usuario_logueado = usuario_logueado
 
         self.title("Sistema de Vacunación - Panel principal")
-        self.geometry("900x560")
+        self.geometry("950x620")
 
         self._construir_widgets()
 
@@ -30,7 +31,11 @@ class VentanaPrincipal(ctk.CTk):
         barra_superior.pack(side="top", fill="x")
 
         texto_usuario = f"Usuario: {self.usuario_logueado['nombre']} {self.usuario_logueado['apellido']}"
-        ctk.CTkLabel(barra_superior, text=texto_usuario).pack(side="left", padx=20, pady=10)
+        ctk.CTkLabel(
+            barra_superior, 
+            text=texto_usuario,
+            font=ctk.CTkFont(size=13, weight="bold")
+        ).pack(side="left", padx=20, pady=10)
 
         # --- Menú lateral ---
         menu_lateral = ctk.CTkFrame(self, width=200, corner_radius=0)
@@ -66,8 +71,14 @@ class VentanaPrincipal(ctk.CTk):
             font=ctk.CTkFont(size=16),
         ).pack(pady=40)
 
-    # --- Callbacks del menú (por ahora placeholders, se van a completar
-    #     a medida que armemos cada pantalla) ---
+    # --- Callbacks del menú ---
+    def _ir_a_transferencias(self):
+        """Módulo de Transferencias e Historial de Remitos."""
+        self._limpiar_area_contenido()
+        vista = VistaTransferencias(self.area_contenido, self.usuario_logueado)
+        vista.pack(fill="both", expand=True)
+
+    # --- Placeholders para los módulos que iremos desarrollando ---
     def _ir_a_importar_csv(self):
         self._limpiar_area_contenido()
         ctk.CTkLabel(self.area_contenido, text="Módulo de Importación de CSV (pendiente)").pack(pady=40)
@@ -83,10 +94,6 @@ class VentanaPrincipal(ctk.CTk):
     def _ir_a_stock(self):
         self._limpiar_area_contenido()
         ctk.CTkLabel(self.area_contenido, text="Módulo de Stock (pendiente)").pack(pady=40)
-
-    def _ir_a_transferencias(self):
-        self._limpiar_area_contenido()
-        ctk.CTkLabel(self.area_contenido, text="Módulo de Transferencias (pendiente)").pack(pady=40)
 
     def _ir_a_vacunatorios(self):
         self._limpiar_area_contenido()
