@@ -24,6 +24,7 @@ def obtener_conexion():
     """
     conexion = sqlite3.connect(RUTA_BD)
     conexion.execute("PRAGMA foreign_keys = ON;")
+    conexion.execute("PRAGMA busy_timeout = 5000;")  # espera hasta 5s si la base está ocupada
     conexion.row_factory = sqlite3.Row  # permite acceder a columnas por nombre
     return conexion
 
