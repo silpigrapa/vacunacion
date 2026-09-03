@@ -39,11 +39,11 @@ class FramePrincipal(ctk.CTkFrame):
         menu_lateral.pack(side="left", fill="y")
 
         opciones = [
-            ("Vacunas", self._ir_a_vacunas),
-            ("Importar aplicaciones (CSV)", self._ir_a_importar_csv),
-            ("Stock / Ampollas", self._ir_a_stock),
-            ("Transferencias", self._ir_a_transferencias),
-            ("Vacunatorios", self._ir_a_vacunatorios),
+            ("💉 Vacunas", self._ir_a_vacunas),
+            ("📥 Importar aplicaciones (CSV)", self._ir_a_importar_csv),
+            ("📦 Stock / Ampollas", self._ir_a_stock),
+            ("🔄 Transferencias", self._ir_a_transferencias),
+            ("🏥 Vacunatorios", self._ir_a_vacunatorios),
         ]
 
         for texto, accion in opciones:
