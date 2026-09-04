@@ -27,7 +27,7 @@ class App(ctk.CTk):
         self.frame_actual.pack(fill="both", expand=True)
 
     def mostrar_login(self):
-        self.geometry("380x320")
+        self.geometry("900x560")
         self.resizable(False, False)
         frame = FrameLogin(self, al_loguear_exitoso=self.mostrar_principal)
         self._cambiar_frame(frame)
