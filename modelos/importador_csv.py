@@ -1,26 +1,29 @@
 """
-Importador del CSV (SISA).
+Importador del CSV del Registro Federal de Vacunación Nominalizado (SISA).
 
 El archivo trae algunas líneas de metadata antes del encabezado real
 (título, fecha de creación, usuario que lo generó), separador ';', y
 fechas en formato DD/MM/YYYY. Este módulo:
 
   1) Encuentra la fila de encabezado real dentro del archivo.
-  2) Por cada fila de datos:
+  2) Permite escanear el archivo para detectar, ANTES de importar, qué
+     valores de 'Establecimiento' no tienen todavía un VACUNATORIO
+     cargado (obtener_establecimientos_del_csv), para que el usuario
+     revise y decida manualmente cuáles crear.
+  3) Al importar, cada fila:
        - Matchea 'Establecimiento' contra VACUNATORIO.nombre (exacto).
-         Si no matchea, la fila se descarta (no sabemos a qué
-         vacunatorio pertenece).
+         Si no matchea, la fila se descarta (no se crea nada
+         automáticamente: el usuario debe cargar el vacunatorio antes,
+         usando la detección del paso 2).
        - Matchea 'Lote' contra LOTE.numero_lote dentro de ese
          vacunatorio. Si no matchea, se guarda igual la aplicación
          (para historial), pero sin descuento de stock.
        - Evita duplicados: si la aplicación ya se había importado
          antes (mismo DNI, vacuna, dosis, fecha y vacunatorio), la
-         omite. Esto permite volver a importar el mismo archivo (o uno
-         más nuevo que incluya filas viejas) sin duplicar el consumo
-         de stock.
+         omite.
        - Si matcheó lote y hay una ampolla con stock, descuenta 1
          dosis con ampolla.descontar_dosis().
-  3) Devuelve un resumen con contadores, para mostrar en la interfaz.
+  4) Devuelve un resumen con contadores, para mostrar en la interfaz.
 """
 
 import csv
@@ -75,6 +78,25 @@ def _encontrar_encabezado_y_filas(ruta_archivo):
     raise ValueError("No se encontró la fila de encabezado esperada en el archivo CSV.")
 
 
+def obtener_establecimientos_del_csv(ruta_archivo):
+    """
+    Escanea el CSV (sin importar nada) y devuelve el conjunto de
+    valores distintos de la columna 'Establecimiento'. Se usa para
+    detectar, antes de importar, qué nombres del archivo no tienen
+    todavía un VACUNATORIO cargado.
+    """
+    archivo, lector = _encontrar_encabezado_y_filas(ruta_archivo)
+    establecimientos = set()
+    try:
+        for fila in lector:
+            establecimiento = _limpiar_valor(fila.get("Establecimiento"))
+            if establecimiento:
+                establecimientos.add(establecimiento)
+    finally:
+        archivo.close()
+    return establecimientos
+
+
 def _ya_existe_aplicacion(cursor, fecha_aplicacion, dni, vacuna_nombre, dosis, id_vacunatorio):
     """
     Verifica si esta aplicación puntual ya fue importada antes,
@@ -94,7 +116,13 @@ def _ya_existe_aplicacion(cursor, fecha_aplicacion, dni, vacuna_nombre, dosis, i
 
 def importar_csv(ruta_archivo):
     """
-    Importa el archivo CSV indicado. Devuelve un diccionario resumen:
+    Importa el archivo CSV indicado. Los 'Establecimiento' que no
+    coincidan con ningún VACUNATORIO cargado se descartan (no se crea
+    nada automáticamente) — para cargarlos, usar antes
+    obtener_establecimientos_del_csv() y crear los vacunatorios que
+    falten manualmente.
+
+    Devuelve un diccionario resumen:
         {
             "total_filas": int,
             "importadas": int,
@@ -122,7 +150,6 @@ def importar_csv(ruta_archivo):
 
     try:
         for fila in lector:
-            # Filas vacías o de cierre del archivo (sin datos reales)
             if not fila.get("Fecha de aplicación"):
                 continue
 
@@ -146,12 +173,10 @@ def importar_csv(ruta_archivo):
             dosis = _limpiar_valor(fila.get("Dosis"))
             numero_lote = _limpiar_valor(fila.get("Lote"))
 
-            # Evitar duplicados si el archivo ya se importó antes
             if _ya_existe_aplicacion(cursor, fecha_aplicacion, dni, vacuna_nombre, dosis, id_vacunatorio):
                 resumen["duplicadas"] += 1
                 continue
 
-            # Intentar matchear el lote dentro de este vacunatorio
             id_lote = None
             if numero_lote:
                 lote = obtener_lote_por_numero(numero_lote, id_vacunatorio)
@@ -195,7 +220,6 @@ def importar_csv(ruta_archivo):
             resumen["importadas"] += 1
             conexion.commit()  # liberar el lock antes de usar otras conexiones (descontar_dosis, etc.)
 
-            # Descontar stock si se pudo identificar el lote
             if id_lote is not None:
                 ampolla_con_stock = obtener_ampolla_con_stock_por_lote(id_lote)
                 if ampolla_con_stock is not None:
