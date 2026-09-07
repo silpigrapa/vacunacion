@@ -5,6 +5,7 @@ Vista de Vacunas: ingreso de vacuna + lote y listado del catálogo/stock.
 from datetime import datetime
 
 import customtkinter as ctk
+from tkinter import ttk
 
 from modelos.vacuna import listar_vacunas, registrar_ingreso_central
 from modelos.lote import listar_lotes
@@ -18,6 +19,26 @@ class FrameVacunas(ctk.CTkFrame):
         self.usuario_logueado = usuario_logueado
         self._construir_widgets()
         self._cargar_listados()
+
+    def _actualizar_color_texto_pestanas(self, tabview):
+        """
+        CTkTabview solo admite un único text_color para todas las
+        pestañas (no distingue seleccionada/no seleccionada), así que
+        acá lo simulamos "a mano": recorremos los botones internos del
+        segmented button y le ponemos blanco al que está seleccionado
+        (fondo verde fuerte) y negro al resto (fondo verde clarito),
+        para que el texto siempre se lea bien.
+
+        Nota: _segmented_button y _buttons_dict son atributos privados
+        de CustomTkinter (no documentados). Funcionan en la versión
+        actual de la librería, pero si en el futuro se actualiza
+        CustomTkinter y cambia su estructura interna, este método podría
+        dejar de funcionar y habría que revisarlo.
+        """
+        botones = tabview._segmented_button._buttons_dict
+        seleccionada = tabview.get()
+        for nombre, boton in botones.items():
+            boton.configure(text_color="white" if nombre == seleccionada else tema.TEXTO_PESTANA_INACTIVA)
 
     def _construir_widgets(self):
         cabecera = ctk.CTkFrame(self, fg_color="transparent")
@@ -57,13 +78,15 @@ class FrameVacunas(ctk.CTkFrame):
             segmented_button_selected_hover_color=tema.HOVER,
             segmented_button_unselected_color=tema.CLARO,
             segmented_button_unselected_hover_color=tema.SUAVE,
-            text_color=("white", "white"),
+            text_color=tema.TEXTO,
             text_color_disabled=tema.TEXTO_SUAVE,
+            command=lambda: self._actualizar_color_texto_pestanas(self.pestanas),
         )
         self.pestanas.pack(fill="both", expand=True, padx=2, pady=2)
 
         self.tab_cargar = self.pestanas.add("Cargar Vacunas")
         self.tab_listado = self.pestanas.add("Listado")
+        self._actualizar_color_texto_pestanas(self.pestanas)
 
         self._construir_formulario()
         self._construir_listado()
@@ -252,73 +275,73 @@ class FrameVacunas(ctk.CTkFrame):
             segmented_button_selected_hover_color=tema.HOVER,
             segmented_button_unselected_color=tema.CLARO,
             segmented_button_unselected_hover_color=tema.SUAVE,
+            text_color=tema.TEXTO,
+            text_color_disabled=tema.TEXTO_SUAVE,
+            command=lambda: self._actualizar_color_texto_pestanas(self.sub),
         )
         self.sub.pack(fill="both", expand=True, padx=6, pady=(0, 6))
 
         self.tab_catalogo = self.sub.add("Catálogo")
         self.tab_lotes = self.sub.add("Lotes ingresados")
+        self._actualizar_color_texto_pestanas(self.sub)
+        self.tab_catalogo.grid_columnconfigure(0, weight=1)
+        self.tab_catalogo.grid_rowconfigure(0, weight=1)
+        self.tab_lotes.grid_columnconfigure(0, weight=1)
+        self.tab_lotes.grid_rowconfigure(0, weight=1)
 
-        self.lista_vacunas = ctk.CTkScrollableFrame(
-            self.tab_catalogo, fg_color="transparent"
+        # Mismo estilo de tabla que usa el módulo de Transferencias
+        estilo = ttk.Style()
+        estilo.theme_use("default")
+        estilo.configure("Treeview", rowheight=25, font=("Arial", 10))
+        estilo.configure("Treeview.Heading", font=("Arial", 10, "bold"))
+
+        columnas_vacunas = ("nombre", "fabricante", "dosis_req", "dosis_amp", "lote", "vencimiento", "ampollas")
+        self.tabla_vacunas = ttk.Treeview(
+            self.tab_catalogo, columns=columnas_vacunas, show="headings", selectmode="browse"
         )
-        self.lista_vacunas.pack(fill="both", expand=True, padx=4, pady=4)
+        self.tabla_vacunas.heading("nombre", text="Nombre")
+        self.tabla_vacunas.heading("fabricante", text="Fabricante")
+        self.tabla_vacunas.heading("dosis_req", text="Dosis req.")
+        self.tabla_vacunas.heading("dosis_amp", text="Dosis/ampolla")
+        self.tabla_vacunas.heading("lote", text="N° lote")
+        self.tabla_vacunas.heading("vencimiento", text="Vencimiento")
+        self.tabla_vacunas.heading("ampollas", text="Ampollas")
+        self.tabla_vacunas.column("nombre", width=170, anchor="w")
+        self.tabla_vacunas.column("fabricante", width=130, anchor="w")
+        self.tabla_vacunas.column("dosis_req", width=90, anchor="center")
+        self.tabla_vacunas.column("dosis_amp", width=100, anchor="center")
+        self.tabla_vacunas.column("lote", width=100, anchor="center")
+        self.tabla_vacunas.column("vencimiento", width=100, anchor="center")
+        self.tabla_vacunas.column("ampollas", width=90, anchor="center")
 
-        self.lista_lotes = ctk.CTkScrollableFrame(
-            self.tab_lotes, fg_color="transparent"
+        scroll_vacunas = ttk.Scrollbar(
+            self.tab_catalogo, orient="vertical", command=self.tabla_vacunas.yview
         )
-        self.lista_lotes.pack(fill="both", expand=True, padx=4, pady=4)
+        self.tabla_vacunas.configure(yscrollcommand=scroll_vacunas.set)
+        self.tabla_vacunas.grid(row=0, column=0, sticky="nsew", padx=(4, 0), pady=4)
+        scroll_vacunas.grid(row=0, column=1, sticky="ns", padx=(0, 4), pady=4)
 
-    def _encabezado(self, padre, columnas):
-        fila = ctk.CTkFrame(
-            padre,
-            fg_color=tema.OSCURO,
-            corner_radius=tema.RADIO,
-            height=34,
+        columnas_lotes = ("vacuna", "lote", "vencimiento", "ampollas", "vacunatorio")
+        self.tabla_lotes = ttk.Treeview(
+            self.tab_lotes, columns=columnas_lotes, show="headings", selectmode="browse"
         )
-        fila.pack(fill="x", pady=(0, 4))
-        fila.pack_propagate(False)
+        self.tabla_lotes.heading("vacuna", text="Vacuna")
+        self.tabla_lotes.heading("lote", text="N° lote")
+        self.tabla_lotes.heading("vencimiento", text="Vencimiento")
+        self.tabla_lotes.heading("ampollas", text="Ampollas")
+        self.tabla_lotes.heading("vacunatorio", text="Vacunatorio")
+        self.tabla_lotes.column("vacuna", width=170, anchor="w")
+        self.tabla_lotes.column("lote", width=110, anchor="center")
+        self.tabla_lotes.column("vencimiento", width=110, anchor="center")
+        self.tabla_lotes.column("ampollas", width=90, anchor="center")
+        self.tabla_lotes.column("vacunatorio", width=160, anchor="w")
 
-        for texto, peso in columnas:
-            ctk.CTkLabel(
-                fila,
-                text=texto,
-                font=ctk.CTkFont(size=12, weight="bold"),
-                text_color="white",
-                anchor="w",
-            ).pack(side="left", fill="x", expand=(peso > 0), padx=10, pady=6)
-
-    def _fila(self, padre, valores, alterna=False):
-        fila = ctk.CTkFrame(
-            padre,
-            fg_color=tema.FILA_ALT if alterna else tema.FONDO_PANEL,
-            corner_radius=tema.RADIO,
-            border_width=1,
-            border_color=tema.BORDE,
-            height=36,
+        scroll_lotes = ttk.Scrollbar(
+            self.tab_lotes, orient="vertical", command=self.tabla_lotes.yview
         )
-        fila.pack(fill="x", pady=1)
-        fila.pack_propagate(False)
-
-        for valor in valores:
-            ctk.CTkLabel(
-                fila,
-                text=str(valor),
-                font=ctk.CTkFont(size=12),
-                text_color=tema.TEXTO,
-                anchor="w",
-            ).pack(side="left", fill="x", expand=True, padx=10, pady=6)
-
-    def _vacio(self, padre, mensaje):
-        ctk.CTkLabel(
-            padre,
-            text=mensaje,
-            font=ctk.CTkFont(size=13),
-            text_color=tema.TEXTO_SUAVE,
-        ).pack(pady=40)
-
-    def _limpiar_contenedor(self, contenedor):
-        for widget in contenedor.winfo_children():
-            widget.destroy()
+        self.tabla_lotes.configure(yscrollcommand=scroll_lotes.set)
+        self.tabla_lotes.grid(row=0, column=0, sticky="nsew", padx=(4, 0), pady=4)
+        scroll_lotes.grid(row=0, column=1, sticky="ns", padx=(0, 4), pady=4)
 
     def _cargar_listados(self):
         vacunas = listar_vacunas()
@@ -328,58 +351,38 @@ class FrameVacunas(ctk.CTkFrame):
             text=f"{len(vacunas)} vacuna(s) en catálogo  ·  {len(lotes)} lote(s) registrados"
         )
 
-        self._limpiar_contenedor(self.lista_vacunas)
-        self._limpiar_contenedor(self.lista_lotes)
+        for item in self.tabla_vacunas.get_children():
+            self.tabla_vacunas.delete(item)
+        for item in self.tabla_lotes.get_children():
+            self.tabla_lotes.delete(item)
 
-        if not vacunas:
-            self._vacio(self.lista_vacunas, "Todavía no hay vacunas en el catálogo.")
-        else:
-            self._encabezado(
-                self.lista_vacunas,
-                (
-                    ("Nombre", 1),
-                    ("Fabricante", 1),
-                    ("Dosis req.", 1),
-                    ("Dosis/ampolla", 1),
+        for lote in lotes:
+            self.tabla_vacunas.insert(
+                "",
+                "end",
+                values=(
+                    lote["nombre_vacuna"] or "-",
+                    lote["fabricante"] or "-",
+                    lote["dosis_requeridas"],
+                    lote["dosis_por_ampolla"],
+                    lote["numero_lote"],
+                    lote["fecha_vencimiento"],
+                    lote["cantidad_ampollas"],
                 ),
             )
-            for i, vacuna in enumerate(vacunas):
-                self._fila(
-                    self.lista_vacunas,
-                    (
-                        vacuna["nombre"] or "-",
-                        vacuna["fabricante"] or "-",
-                        vacuna["dosis_requeridas"],
-                        vacuna["dosis_por_ampolla"],
-                    ),
-                    alterna=i % 2 == 1,
-                )
 
-        if not lotes:
-            self._vacio(self.lista_lotes, "Todavía no hay lotes ingresados.")
-        else:
-            self._encabezado(
-                self.lista_lotes,
-                (
-                    ("Vacuna", 1),
-                    ("N° lote", 1),
-                    ("Vencimiento", 1),
-                    ("Ampollas", 1),
-                    ("Vacunatorio", 1),
+        for lote in lotes:
+            self.tabla_lotes.insert(
+                "",
+                "end",
+                values=(
+                    lote["nombre_vacuna"],
+                    lote["numero_lote"],
+                    lote["fecha_vencimiento"],
+                    lote["cantidad_ampollas"],
+                    lote["nombre_vacunatorio"],
                 ),
             )
-            for i, lote in enumerate(lotes):
-                self._fila(
-                    self.lista_lotes,
-                    (
-                        lote["nombre_vacuna"],
-                        lote["numero_lote"],
-                        lote["fecha_vencimiento"],
-                        lote["cantidad_ampollas"],
-                        lote["nombre_vacunatorio"],
-                    ),
-                    alterna=i % 2 == 1,
-                )
 
     def _mostrar_mensaje(self, texto, ok=True):
         self.etiqueta_mensaje.configure(

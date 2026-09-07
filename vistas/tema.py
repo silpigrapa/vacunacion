@@ -27,6 +27,7 @@ FILA_ALT = "gray81"
 # Texto
 TEXTO = "gray10"
 TEXTO_SUAVE = "gray40"
+TEXTO_PESTANA_INACTIVA = "gray25"  # un poco más claro que TEXTO, para las pestañas sin seleccionar
 
 # Estados de mensajes
 OK = "#0C955A"
