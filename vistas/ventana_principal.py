@@ -1,23 +1,19 @@
 """
 Panel principal del Sistema de Vacunación.
-
-Implementado como CTkFrame (ver nota en login.py sobre por qué se
-evita crear una segunda ventana ctk.CTk()).
 """
 
 import customtkinter as ctk
 from vistas.transferencias import VistaTransferencias
 from vistas.vacunas import FrameVacunas
 from vistas.importar_csv_vista import FrameImportarCSV
+from vistas.vacunatorios_vista import FrameVacunatorios
+from vistas.stock_vista import FrameStock
 
 
 class FramePrincipal(ctk.CTkFrame):
     def __init__(self, master, usuario_logueado):
-        """
-        master: la ventana raíz (App) donde se monta este frame.
-        usuario_logueado: sqlite3.Row con los datos del usuario que
-        inició sesión.
-        """
+
+        
         super().__init__(master)
         self.usuario_logueado = usuario_logueado
         self._construir_widgets()
@@ -88,8 +84,10 @@ class FramePrincipal(ctk.CTkFrame):
     # --- Placeholders para los módulos que faltan desarrollar ---
     def _ir_a_stock(self):
         self._limpiar_area_contenido()
-        ctk.CTkLabel(self.area_contenido, text="Módulo de Stock (pendiente)").pack(pady=40)
+        frame = FrameStock(self.area_contenido)
+        frame.pack(fill="both", expand=True)
 
     def _ir_a_vacunatorios(self):
         self._limpiar_area_contenido()
-        ctk.CTkLabel(self.area_contenido, text="Módulo de Vacunatorios (pendiente)").pack(pady=40)
+        frame = FrameVacunatorios(self.area_contenido)
+        frame.pack(fill="both", expand=True)
