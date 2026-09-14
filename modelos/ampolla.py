@@ -30,6 +30,77 @@ def crear_ampolla(id_lote, id_vacunatorio_actual, dosis_disponibles, fecha_apert
     return id_ampolla
 
 
+def listar_ampollas_por_vacunatorio(id_vacunatorio, id_vacuna=None):
+    """
+    Devuelve TODAS las ampollas de un vacunatorio (a diferencia de
+    listar_ampollas_utilizables, incluye también las vencidas y las
+    agotadas), con el nombre de la vacuna y el estado calculado
+    ('Utilizable', 'Vencida' o 'Agotada'). Pensada para la pantalla de
+    Stock, donde interesa ver el panorama completo.
+    """
+    conexion = obtener_conexion()
+    cursor = conexion.cursor()
+
+    condiciones = "a.id_vacunatorio_actual = ?"
+    parametros = [id_vacunatorio]
+
+    if id_vacuna is not None:
+        condiciones += " AND l.id_vacuna = ?"
+        parametros.append(id_vacuna)
+
+    cursor.execute(
+        f"""
+        SELECT
+            a.id_ampolla, a.dosis_disponibles, a.fecha_apertura,
+            l.numero_lote, l.fecha_vencimiento, l.id_vacuna,
+            v.nombre AS vacuna_nombre,
+            CASE
+                WHEN l.fecha_vencimiento < date('now') THEN 'Vencida'
+                WHEN a.dosis_disponibles <= 0 THEN 'Agotada'
+                ELSE 'Utilizable'
+            END AS estado
+        FROM AMPOLLA a
+        JOIN LOTE l ON a.id_lote = l.id_lote
+        JOIN VACUNA v ON l.id_vacuna = v.id_vacuna
+        WHERE {condiciones}
+        ORDER BY l.fecha_vencimiento ASC
+        """,
+        parametros,
+    )
+    filas = cursor.fetchall()
+    conexion.close()
+    return filas
+
+
+def obtener_stock_por_vacunatorio(id_vacuna):
+    """
+    Devuelve, para una vacuna puntual, el stock utilizable (en stock y
+    no vencido) en CADA vacunatorio cargado en el sistema — incluye
+    los que tienen 0. Es la consulta clave para saber quién puede
+    cubrir un faltante de esa vacuna.
+    """
+    conexion = obtener_conexion()
+    cursor = conexion.cursor()
+    cursor.execute(
+        """
+        SELECT v.id_vacunatorio, v.nombre, COALESCE(SUM(sub.dosis_disponibles), 0) AS stock
+        FROM VACUNATORIO v
+        LEFT JOIN (
+            SELECT a.id_vacunatorio_actual AS id_vacunatorio, a.dosis_disponibles
+            FROM AMPOLLA a
+            JOIN LOTE l ON a.id_lote = l.id_lote
+            WHERE l.id_vacuna = ? AND l.fecha_vencimiento >= date('now') AND a.dosis_disponibles > 0
+        ) sub ON sub.id_vacunatorio = v.id_vacunatorio
+        GROUP BY v.id_vacunatorio, v.nombre
+        ORDER BY stock DESC
+        """,
+        (id_vacuna,),
+    )
+    filas = cursor.fetchall()
+    conexion.close()
+    return filas
+
+
 def obtener_ampolla_por_id(id_ampolla):
     conexion = obtener_conexion()
     cursor = conexion.cursor()

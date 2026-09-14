@@ -1,10 +1,5 @@
 """
-Importador del CSV del Registro Federal de Vacunación Nominalizado (SISA).
-
-El archivo trae algunas líneas de metadata antes del encabezado real
-(título, fecha de creación, usuario que lo generó), separador ';', y
-fechas en formato DD/MM/YYYY. Este módulo:
-
+Importador del CSV de aplicaciones de vacunas. Se encarga de:
   1) Encuentra la fila de encabezado real dentro del archivo.
   2) Permite escanear el archivo para detectar, ANTES de importar, qué
      valores de 'Establecimiento' no tienen todavía un VACUNATORIO
