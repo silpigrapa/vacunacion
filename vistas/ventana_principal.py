@@ -1,5 +1,7 @@
 """
 Panel principal del Sistema de Vacunación.
+
+Implementado como CTkFrame  
 """
 
 import customtkinter as ctk
@@ -12,8 +14,11 @@ from vistas.stock_vista import FrameStock
 
 class FramePrincipal(ctk.CTkFrame):
     def __init__(self, master, usuario_logueado):
-
-        
+        """
+        master: la ventana raíz (App) donde se monta este frame.
+        usuario_logueado: sqlite3.Row con los datos del usuario que
+        inició sesión.
+        """
         super().__init__(master)
         self.usuario_logueado = usuario_logueado
         self._construir_widgets()
