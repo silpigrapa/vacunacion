@@ -55,15 +55,18 @@ def obtener_lote_por_numero(numero_lote, id_vacunatorio):
 def listar_lotes():
     """
     Devuelve todos los lotes registrados en el sistema, sin importar el
-    vacunatorio, con el nombre de la vacuna y del vacunatorio incluidos
-    (JOIN). Se usa en la vista de Vacunas para mostrar el listado
-    general de lotes ingresados en el hospital central.
+    vacunatorio, con los datos de la vacuna (nombre, fabricante, dosis
+    requeridas y dosis por ampolla) y del vacunatorio incluidos (JOIN).
+    Se usa en la vista de Vacunas para mostrar el listado general de
+    lotes ingresados en el hospital central.
     """
     conexion = obtener_conexion()
     cursor = conexion.cursor()
     cursor.execute(
         """
-        SELECT l.*, v.nombre AS nombre_vacuna, vt.nombre AS nombre_vacunatorio
+        SELECT l.*, v.nombre AS nombre_vacuna, v.fabricante,
+               v.dosis_requeridas, v.dosis_por_ampolla,
+               vt.nombre AS nombre_vacunatorio
         FROM LOTE l
         JOIN VACUNA v ON l.id_vacuna = v.id_vacuna
         JOIN VACUNATORIO vt ON l.id_vacunatorio = vt.id_vacunatorio

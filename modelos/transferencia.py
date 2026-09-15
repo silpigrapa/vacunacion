@@ -19,11 +19,17 @@ def registrar_transferencia(
     """
     Registra una nueva transferencia en la BD:
     1. Inserta la cabecera en TRANSFERENCIA.
-    2. Inserta cada ampolla en TRANSFERENCIA_DETALLE.
-    3. Actualiza el vacunatorio_actual de las ampollas en la tabla AMPOLLA.
+    2. Valida cada ampolla (existe y pertenece al origen) ANTES de tocarla.
+    3. Inserta cada ampolla en TRANSFERENCIA_DETALLE.
+    4. Actualiza el vacunatorio_actual de las ampollas en la tabla AMPOLLA.
 
     Usa una transacción (commit al final o rollback si falla algo)
     para garantizar la integridad de los datos.
+
+    Nota: la validación previa (paso 2) evita que una ampolla
+    inexistente dispare un sqlite3.IntegrityError (por la FOREIGN KEY
+    de TRANSFERENCIA_DETALLE hacia AMPOLLA) en vez del ValueError
+    claro que se quiere mostrar en la interfaz.
     """
     if id_vacunatorio_origen == id_vacunatorio_destino:
         raise ValueError(
@@ -59,6 +65,23 @@ def registrar_transferencia(
 
         # 2) Insertar detalles y actualizar stock/ubicación de cada ampolla
         for id_ampolla in lista_id_ampollas:
+            # Validar ANTES de insertar/actualizar, para distinguir
+            # "no existe" de "existe pero está en otro vacunatorio" y
+            # dar siempre un ValueError claro (nunca un error crudo de SQLite).
+            cursor.execute(
+                "SELECT id_vacunatorio_actual FROM AMPOLLA WHERE id_ampolla = ?",
+                (id_ampolla,),
+            )
+            fila_ampolla = cursor.fetchone()
+
+            if fila_ampolla is None:
+                raise ValueError(f"La ampolla ID {id_ampolla} no existe.")
+
+            if fila_ampolla["id_vacunatorio_actual"] != id_vacunatorio_origen:
+                raise ValueError(
+                    f"La ampolla ID {id_ampolla} no pertenece al vacunatorio de origen."
+                )
+
             # Insertar detalle
             cursor.execute(
                 """
@@ -77,11 +100,6 @@ def registrar_transferencia(
                 """,
                 (id_vacunatorio_destino, id_ampolla, id_vacunatorio_origen),
             )
-
-            if cursor.rowcount == 0:
-                raise ValueError(
-                    f"La ampolla ID {id_ampolla} no pertenece al vacunatorio de origen o no existe."
-                )
 
         # Confirmar la transacción
         conexion.commit()

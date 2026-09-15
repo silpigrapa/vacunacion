@@ -14,7 +14,7 @@ from datetime import datetime
 import customtkinter as ctk
 
 from modelos.vacuna import listar_vacunas
-from modelos.vacunatorio import listar_vacunatorios
+from modelos.vacunatorio import listar_vacunatorios, obtener_vacunatorio_central
 from modelos.lote import crear_lote
 from modelos.ampolla import (
     crear_ampolla,
@@ -183,12 +183,32 @@ class FrameStock(ctk.CTkFrame):
     # Tab 3: alta de nuevo stock (lote + ampollas)
     # ------------------------------------------------------------------
     def _construir_tab_alta(self, tab):
+        central = obtener_vacunatorio_central()
+
+        if central is None:
+            ctk.CTkLabel(
+                tab,
+                text=(
+                    "Todavía no hay ningún vacunatorio marcado como central.\n"
+                    "Definilo desde la pantalla de Vacunatorios antes de cargar stock."
+                ),
+                justify="left",
+            ).pack(anchor="w", padx=15, pady=15)
+            return
+
+        self.id_vacunatorio_central = central["id_vacunatorio"]
+
         ctk.CTkLabel(tab, text="Vacunatorio").pack(anchor="w", padx=15, pady=(15, 0))
-        self.combo_vacunatorio_alta = ctk.CTkComboBox(
-            tab, values=[v["nombre"] for v in self.vacunatorios], state="readonly"
-        )
-        self.combo_vacunatorio_alta.pack(fill="x", padx=15, pady=(0, 10))
-        self.combo_vacunatorio_alta.set(self.vacunatorios[0]["nombre"])
+        ctk.CTkLabel(
+            tab, text=f"{central['nombre']}  ⭐ Central",
+            font=ctk.CTkFont(weight="bold"),
+        ).pack(anchor="w", padx=15, pady=(0, 10))
+        ctk.CTkLabel(
+            tab,
+            text="Solo el vacunatorio central recibe stock nuevo directamente; "
+                 "los demás lo reciben por transferencia.",
+            font=ctk.CTkFont(size=11), text_color="gray",
+        ).pack(anchor="w", padx=15, pady=(0, 10))
 
         ctk.CTkLabel(tab, text="Vacuna").pack(anchor="w", padx=15)
         self.combo_vacuna_alta = ctk.CTkComboBox(
@@ -217,7 +237,6 @@ class FrameStock(ctk.CTkFrame):
         ).pack(anchor="w", padx=15, pady=15)
 
     def _cargar_stock(self):
-        nombre_vacunatorio = self.combo_vacunatorio_alta.get()
         nombre_vacuna = self.combo_vacuna_alta.get()
         numero_lote = self.campo_numero_lote.get().strip()
         fecha_vencimiento = self.campo_fecha_vencimiento.get().strip()
@@ -238,7 +257,7 @@ class FrameStock(ctk.CTkFrame):
             return
 
         cantidad_ampollas = int(cantidad_texto)
-        id_vacunatorio = self._id_vacunatorio_por_nombre(nombre_vacunatorio)
+        id_vacunatorio = self.id_vacunatorio_central
         vacuna = next(v for v in self.vacunas if v["nombre"] == nombre_vacuna)
         id_vacuna = vacuna["id_vacuna"]
         dosis_por_ampolla = vacuna["dosis_por_ampolla"]
