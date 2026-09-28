@@ -63,13 +63,15 @@ def listar_lotes():
     cursor = conexion.cursor()
     cursor.execute(
         """
-        SELECT l.*, v.nombre AS nombre_vacuna, vt.nombre AS nombre_vacunatorio
+        SELECT l.*, v.nombre AS nombre_vacuna, v.fabricante,
+           v.dosis_requeridas, v.dosis_por_ampolla,
+           vt.nombre AS nombre_vacunatorio
         FROM LOTE l
         JOIN VACUNA v ON l.id_vacuna = v.id_vacuna
         JOIN VACUNATORIO vt ON l.id_vacunatorio = vt.id_vacunatorio
         ORDER BY l.fecha_vencimiento ASC
         """
-    )
+)
     filas = cursor.fetchall()
     conexion.close()
     return filas

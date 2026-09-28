@@ -2,7 +2,8 @@
 Vista de Vacunas: ingreso de vacuna + lote y listado del catálogo/stock.
 """
 
-from datetime import datetime
+import calendar
+from datetime import date, datetime
 
 import customtkinter as ctk
 from tkinter import ttk
@@ -12,6 +13,155 @@ from modelos.lote import listar_lotes
 from modelos.vacunatorio import obtener_vacunatorio_central
 from vistas import tema
 
+MESES = [
+    "Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio",
+    "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre",
+]
+DIAS_SEMANA = ["Lu", "Ma", "Mi", "Ju", "Vi", "Sa", "Do"]
+
+
+class VentanaCalendario(ctk.CTkToplevel):
+    """Popup modal con un calendario mensual para elegir una fecha."""
+
+    def __init__(self, master, al_elegir, fecha_inicial=None, widget_referencia=None):
+        super().__init__(master)
+        self.al_elegir = al_elegir
+
+        self.title("Elegir fecha")
+        self.resizable(False, False)
+        self.transient(master)
+        self.overrideredirect(True)  # sin barra de título, look de "desplegable"
+        self.attributes("-topmost", True)  # siempre visible por encima del resto
+
+        base = fecha_inicial or date.today()
+        self.anio = base.year
+        self.mes = base.month
+
+        self._construir_widgets()
+        self._dibujar_mes()
+
+        if widget_referencia is not None:
+            self._posicionar_bajo(widget_referencia)
+
+        self.bind("<Escape>", lambda evento: self._cerrar())
+        self.lift()
+        self.focus_force()
+
+    def _posicionar_bajo(self, widget):
+        """Ubica el popup justo debajo del campo de fecha que lo abrió."""
+        self.update_idletasks()
+        x = widget.winfo_rootx()
+        y = widget.winfo_rooty() + widget.winfo_height() + 2
+        self.geometry(f"+{x}+{y}")
+
+    def _construir_widgets(self):
+        cabecera = ctk.CTkFrame(self, fg_color=tema.OSCURO, corner_radius=0)
+        cabecera.pack(fill="x")
+
+        ctk.CTkButton(
+            cabecera, text="◀", width=32, height=28,
+            fg_color="transparent", hover_color=tema.HOVER,
+            command=self._mes_anterior,
+        ).pack(side="left", padx=4, pady=4)
+
+        self.etiqueta_mes = ctk.CTkLabel(
+            cabecera, text="", font=ctk.CTkFont(size=13, weight="bold"),
+            text_color="white",
+        )
+        self.etiqueta_mes.pack(side="left", expand=True)
+
+        ctk.CTkButton(
+            cabecera, text="▶", width=32, height=28,
+            fg_color="transparent", hover_color=tema.HOVER,
+            command=self._mes_siguiente,
+        ).pack(side="right", padx=4, pady=4)
+
+        self.marco_dias = ctk.CTkFrame(self, fg_color="transparent")
+        self.marco_dias.pack(padx=8, pady=8)
+
+    def _mes_anterior(self):
+        self.mes -= 1
+        if self.mes == 0:
+            self.mes = 12
+            self.anio -= 1
+        self._dibujar_mes()
+
+    def _mes_siguiente(self):
+        self.mes += 1
+        if self.mes == 13:
+            self.mes = 1
+            self.anio += 1
+        self._dibujar_mes()
+
+    def _dibujar_mes(self):
+        for widget in self.marco_dias.winfo_children():
+            widget.destroy()
+
+        self.etiqueta_mes.configure(text=f"{MESES[self.mes - 1]} {self.anio}")
+
+        for columna, nombre in enumerate(DIAS_SEMANA):
+            ctk.CTkLabel(
+                self.marco_dias, text=nombre, width=34,
+                font=ctk.CTkFont(size=11, weight="bold"),
+                text_color=tema.TEXTO_SUAVE,
+            ).grid(row=0, column=columna, pady=(0, 4))
+
+        semanas = calendar.Calendar(firstweekday=0).monthdayscalendar(self.anio, self.mes)
+        hoy = date.today()
+
+        for fila, semana in enumerate(semanas, start=1):
+            for columna, dia in enumerate(semana):
+                if dia == 0:
+                    continue
+                es_hoy = dia == hoy.day and self.mes == hoy.month and self.anio == hoy.year
+                ctk.CTkButton(
+                    self.marco_dias,
+                    text=str(dia),
+                    width=34,
+                    height=30,
+                    corner_radius=tema.RADIO,
+                    fg_color=tema.PRINCIPAL if es_hoy else "transparent",
+                    text_color="white" if es_hoy else tema.TEXTO,
+                    hover_color=tema.SUAVE,
+                    command=lambda d=dia: self._elegir(d),
+                ).grid(row=fila, column=columna, padx=1, pady=1)
+
+    def _cerrar(self):
+        """
+        Cierra el popup y le devuelve el foco del teclado a la ventana
+        principal. Con overrideredirect(True), al destruir el popup el
+        sistema no le devuelve el foco a la app y los campos no reciben teclas.
+        """
+        raiz = self.master.winfo_toplevel()
+        self.destroy()
+        raiz.after(10, raiz.focus_force)
+
+    def _elegir(self, dia):
+        fecha_elegida = date(self.anio, self.mes, dia)
+        self.al_elegir(fecha_elegida)
+        self._cerrar()
+
+
+def _mostrar_selector_fecha(master, entrada, fecha_inicial=None):
+    """
+    Abre el popup de calendario debajo del campo `entrada`. Al elegir una
+    fecha, la escribe en la entrada con formato DD/MM/AAAA.
+
+    `entrada` puede estar en estado "readonly": esta función la habilita
+    temporalmente para poder escribir la fecha elegida.
+    """
+
+    def al_elegir(fecha):
+        estado_previo = entrada.cget("state")
+        entrada.configure(state="normal")
+        entrada.delete(0, "end")
+        entrada.insert(0, fecha.strftime("%d/%m/%Y"))
+        entrada.configure(state=estado_previo)
+
+    VentanaCalendario(
+        master, al_elegir, fecha_inicial=fecha_inicial, widget_referencia=entrada
+    )
+
 
 class FrameVacunas(ctk.CTkFrame):
     def __init__(self, master, usuario_logueado=None):
@@ -19,26 +169,19 @@ class FrameVacunas(ctk.CTkFrame):
         self.usuario_logueado = usuario_logueado
         self._construir_widgets()
         self._cargar_listados()
+        # Foco automático en el primer campo vacío para poder escribir de una
+        self.after(100, self.campo_nombre.focus_set)
 
     def _actualizar_color_texto_pestanas(self, tabview):
-        """
-        CTkTabview solo admite un único text_color para todas las
-        pestañas (no distingue seleccionada/no seleccionada), así que
-        acá lo simulamos "a mano": recorremos los botones internos del
-        segmented button y le ponemos blanco al que está seleccionado
-        (fondo verde fuerte) y negro al resto (fondo verde clarito),
-        para que el texto siempre se lea bien.
-
-        Nota: _segmented_button y _buttons_dict son atributos privados
-        de CustomTkinter (no documentados). Funcionan en la versión
-        actual de la librería, pero si en el futuro se actualiza
-        CustomTkinter y cambia su estructura interna, este método podría
-        dejar de funcionar y habría que revisarlo.
-        """
         botones = tabview._segmented_button._buttons_dict
         seleccionada = tabview.get()
         for nombre, boton in botones.items():
             boton.configure(text_color="white" if nombre == seleccionada else tema.TEXTO_PESTANA_INACTIVA)
+
+    def _al_cambiar_pestana_principal(self):
+        self._actualizar_color_texto_pestanas(self.pestanas)
+        if self.pestanas.get() == "Cargar Vacunas":
+            self.after(100, self.campo_nombre.focus_set)
 
     def _construir_widgets(self):
         cabecera = ctk.CTkFrame(self, fg_color="transparent")
@@ -80,7 +223,7 @@ class FrameVacunas(ctk.CTkFrame):
             segmented_button_unselected_hover_color=tema.SUAVE,
             text_color=tema.TEXTO,
             text_color_disabled=tema.TEXTO_SUAVE,
-            command=lambda: self._actualizar_color_texto_pestanas(self.pestanas),
+            command=self._al_cambiar_pestana_principal,
         )
         self.pestanas.pack(fill="both", expand=True, padx=2, pady=2)
 
@@ -94,22 +237,6 @@ class FrameVacunas(ctk.CTkFrame):
     def _construir_formulario(self):
         scroll = ctk.CTkScrollableFrame(self.tab_cargar, fg_color="transparent")
         scroll.pack(fill="both", expand=True, padx=6, pady=6)
-
-        intro = ctk.CTkFrame(
-            scroll,
-            fg_color=tema.CLARO,
-            corner_radius=tema.RADIO,
-            border_width=1,
-            border_color=tema.BORDE,
-        )
-        intro.pack(fill="x", pady=(0, 10))
-        ctk.CTkLabel(
-            intro,
-            text="Registrá vacuna y lote juntos, tal como llegan al hospital.",
-            font=ctk.CTkFont(size=13),
-            text_color=tema.OSCURO,
-            anchor="w",
-        ).pack(fill="x", padx=14, pady=10)
 
         seccion_vacuna = self._seccion(scroll, "1 · Datos de la vacuna")
         fila1 = ctk.CTkFrame(seccion_vacuna, fg_color="transparent")
@@ -144,9 +271,7 @@ class FrameVacunas(ctk.CTkFrame):
         fila3.grid_columnconfigure((0, 1), weight=1)
 
         self.campo_numero_lote = self._campo_grid(fila3, 0, "Número de lote *")
-        self.campo_vencimiento = self._campo_grid(
-            fila3, 1, "Fecha de vencimiento *", placeholder="AAAA-MM-DD"
-        )
+        self.campo_vencimiento = self._campo_fecha_grid(fila3, 1, "Fecha de vencimiento *")
 
         fila4 = ctk.CTkFrame(seccion_lote, fg_color="transparent")
         fila4.pack(fill="x", padx=12, pady=(0, 12))
@@ -240,6 +365,42 @@ class FrameVacunas(ctk.CTkFrame):
             entrada.insert(0, valor_inicial)
         entrada.pack(fill="x")
         return entrada
+
+    def _campo_fecha_grid(self, padre, columna, etiqueta):
+        """Igual que _campo_grid, pero de solo lectura: al hacer clic abre
+        un calendario y la fecha elegida se completa como DD/MM/AAAA."""
+        caja = ctk.CTkFrame(padre, fg_color="transparent")
+        caja.grid(row=0, column=columna, sticky="nsew", padx=(0 if columna == 0 else 8, 0))
+
+        ctk.CTkLabel(
+            caja,
+            text=etiqueta,
+            font=ctk.CTkFont(size=12),
+            text_color=tema.TEXTO_SUAVE,
+            anchor="w",
+        ).pack(fill="x", pady=(0, 4))
+
+        entrada = ctk.CTkEntry(
+            caja,
+            height=34,
+            corner_radius=tema.RADIO,
+            border_color=tema.BORDE,
+            placeholder_text="DD/MM/AAAA",
+            state="readonly",
+        )
+        entrada.pack(fill="x")
+        entrada.bind("<Button-1>", lambda evento, e=entrada: self._abrir_calendario(e))
+        return entrada
+
+    def _abrir_calendario(self, entrada):
+        fecha_inicial = None
+        texto_actual = entrada.get().strip()
+        if texto_actual:
+            try:
+                fecha_inicial = datetime.strptime(texto_actual, "%d/%m/%Y").date()
+            except ValueError:
+                fecha_inicial = None
+        _mostrar_selector_fecha(self, entrada, fecha_inicial=fecha_inicial)
 
     def _construir_listado(self):
         barra = ctk.CTkFrame(self.tab_listado, fg_color="transparent")
@@ -343,6 +504,14 @@ class FrameVacunas(ctk.CTkFrame):
         self.tabla_lotes.grid(row=0, column=0, sticky="nsew", padx=(4, 0), pady=4)
         scroll_lotes.grid(row=0, column=1, sticky="ns", padx=(0, 4), pady=4)
 
+    @staticmethod
+    def _formatear_fecha(fecha_iso):
+        """Convierte AAAA-MM-DD (como se guarda en la base) a DD/MM/AAAA para mostrar."""
+        try:
+            return datetime.strptime(fecha_iso, "%Y-%m-%d").strftime("%d/%m/%Y")
+        except (ValueError, TypeError):
+            return fecha_iso or "-"
+
     def _cargar_listados(self):
         vacunas = listar_vacunas()
         lotes = listar_lotes()
@@ -366,7 +535,7 @@ class FrameVacunas(ctk.CTkFrame):
                     lote["dosis_requeridas"],
                     lote["dosis_por_ampolla"],
                     lote["numero_lote"],
-                    lote["fecha_vencimiento"],
+                    self._formatear_fecha(lote["fecha_vencimiento"]),
                     lote["cantidad_ampollas"],
                 ),
             )
@@ -378,7 +547,7 @@ class FrameVacunas(ctk.CTkFrame):
                 values=(
                     lote["nombre_vacuna"],
                     lote["numero_lote"],
-                    lote["fecha_vencimiento"],
+                    self._formatear_fecha(lote["fecha_vencimiento"]),
                     lote["cantidad_ampollas"],
                     lote["nombre_vacunatorio"],
                 ),
@@ -396,12 +565,16 @@ class FrameVacunas(ctk.CTkFrame):
             (self.campo_dosis_requeridas, "1"),
             (self.campo_dosis_ampolla, "1"),
             (self.campo_numero_lote, ""),
-            (self.campo_vencimiento, ""),
             (self.campo_cantidad, "1"),
         ):
             campo.delete(0, "end")
             if default:
                 campo.insert(0, default)
+
+        self.campo_vencimiento.configure(state="normal")
+        self.campo_vencimiento.delete(0, "end")
+        self.campo_vencimiento.configure(state="readonly")
+
         self.etiqueta_mensaje.configure(text="")
 
     def _obtener_vacunatorio_destino(self):
@@ -416,7 +589,7 @@ class FrameVacunas(ctk.CTkFrame):
         nombre = self.campo_nombre.get().strip()
         fabricante = self.campo_fabricante.get().strip() or None
         numero_lote = self.campo_numero_lote.get().strip()
-        fecha_vencimiento = self.campo_vencimiento.get().strip()
+        fecha_vencimiento_ddmmaaaa = self.campo_vencimiento.get().strip()
         texto_req = self.campo_dosis_requeridas.get().strip()
         texto_amp = self.campo_dosis_ampolla.get().strip()
         texto_cant = self.campo_cantidad.get().strip()
@@ -427,15 +600,17 @@ class FrameVacunas(ctk.CTkFrame):
         if not numero_lote:
             self._mostrar_mensaje("El número de lote es obligatorio.", ok=False)
             return
-        if not fecha_vencimiento:
+        if not fecha_vencimiento_ddmmaaaa:
             self._mostrar_mensaje("La fecha de vencimiento es obligatoria.", ok=False)
             return
 
         try:
-            datetime.strptime(fecha_vencimiento, "%Y-%m-%d")
+            fecha_vencimiento = datetime.strptime(
+                fecha_vencimiento_ddmmaaaa, "%d/%m/%Y"
+            ).strftime("%Y-%m-%d")
         except ValueError:
             self._mostrar_mensaje(
-                "Fecha inválida. Usá el formato AAAA-MM-DD (ej: 2027-06-30).",
+                "Fecha inválida. Elegila con el calendario.",
                 ok=False,
             )
             return

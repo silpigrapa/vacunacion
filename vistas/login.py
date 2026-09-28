@@ -17,6 +17,8 @@ class FrameLogin(ctk.CTkFrame):
         super().__init__(master)
         self.al_loguear_exitoso = al_loguear_exitoso
         self._construir_widgets()
+        # Foco automático en el primer campo vacío para poder escribir de una
+        self.after(100, self.campo_usuario.focus_set)
 
     def _construir_widgets(self):
         contenedor = ctk.CTkFrame(self, corner_radius=12)
