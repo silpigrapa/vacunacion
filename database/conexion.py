@@ -46,11 +46,18 @@ def inicializar_base_de_datos():
         with open(RUTA_SCRIPT_SQL, "r", encoding="utf-8") as archivo:
             script = archivo.read()
         conexion.executescript(script)
-        conexion.commit()
         print(f"Base de datos creada en: {RUTA_BD}")
     else:
         print(f"Base de datos ya existente en: {RUTA_BD}")
 
+    conexion.execute(
+        """
+        CREATE TABLE IF NOT EXISTS OPCION_VACUNA_CSV (
+            nombre TEXT PRIMARY KEY
+        )
+        """
+    )
+    conexion.commit()
     conexion.close()
 
 
