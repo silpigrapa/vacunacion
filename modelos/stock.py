@@ -49,38 +49,29 @@ def obtener_stock_por_vacunatorio(id_vacunatorio: int = None):
 
 def obtener_resumen_stock(id_vacunatorio: int = None):
     """
-    Devuelve un resumen consolidado del stock agrupado por vacuna y lote,
-    calculando la cantidad de ampollas y el total de dosis disponibles.
+    Devuelve los totales de vacunas, ampollas y dosis disponibles.
     """
     conexion = obtener_conexion()
-    cursor = conexion.cursor()
+    try:
+        cursor = conexion.cursor()
+        sql = """
+            SELECT
+                COUNT(DISTINCT l.id_vacuna) AS vacunas_con_stock,
+                COUNT(a.id_ampolla) AS ampollas_con_stock,
+                COALESCE(SUM(a.dosis_disponibles), 0) AS dosis_disponibles
+            FROM AMPOLLA a
+            INNER JOIN LOTE l ON a.id_lote = l.id_lote
+            WHERE a.dosis_disponibles > 0
+        """
+        parametros = []
+        if id_vacunatorio is not None:
+            sql += " AND a.id_vacunatorio_actual = ?"
+            parametros.append(id_vacunatorio)
 
-    sql = """
-        SELECT 
-            v.nombre AS vacuna,
-            l.numero_lote,
-            l.fecha_vencimiento,
-            COUNT(a.id_ampolla) AS total_ampollas,
-            SUM(a.dosis_disponibles) AS total_dosis,
-            vc.nombre AS vacunatorio
-        FROM AMPOLLA a
-        INNER JOIN LOTE l ON a.id_lote = l.id_lote
-        INNER JOIN VACUNA v ON l.id_vacuna = v.id_vacuna
-        INNER JOIN VACUNATORIO vc ON a.id_vacunatorio_actual = vc.id_vacunatorio
-        WHERE a.dosis_disponibles > 0
-    """
-
-    parametros = []
-    if id_vacunatorio is not None:
-        sql += " AND a.id_vacunatorio_actual = ?"
-        parametros.append(id_vacunatorio)
-
-    sql += " GROUP BY v.id_vacuna, l.id_lote, a.id_vacunatorio_actual ORDER BY l.fecha_vencimiento ASC"
-
-    cursor.execute(sql, parametros)
-    filas = cursor.fetchall()
-    conexion.close()
-    return filas
+        cursor.execute(sql, parametros)
+        return cursor.fetchone()
+    finally:
+        conexion.close()
 
 
 def descontar_dosis_ampolla(id_ampolla: int, dosis_a_descontar: int = 1):
@@ -136,10 +127,62 @@ def descontar_dosis_ampolla(id_ampolla: int, dosis_a_descontar: int = 1):
 
 # --- ALIAS DE COMPATIBILIDAD ---
 def listar_ampollas_detalle(id_vacunatorio: int = None):
-    return obtener_stock_por_vacunatorio(id_vacunatorio)
+    conexion = obtener_conexion()
+    try:
+        cursor = conexion.cursor()
+        sql = """
+            SELECT
+                a.id_ampolla,
+                v.nombre AS nombre_vacuna,
+                l.numero_lote,
+                l.fecha_vencimiento,
+                a.dosis_disponibles,
+                a.fecha_apertura,
+                vc.nombre AS nombre_vacunatorio
+            FROM AMPOLLA a
+            INNER JOIN LOTE l ON a.id_lote = l.id_lote
+            INNER JOIN VACUNA v ON l.id_vacuna = v.id_vacuna
+            INNER JOIN VACUNATORIO vc ON a.id_vacunatorio_actual = vc.id_vacunatorio
+            WHERE a.dosis_disponibles > 0
+        """
+        parametros = []
+        if id_vacunatorio is not None:
+            sql += " AND a.id_vacunatorio_actual = ?"
+            parametros.append(id_vacunatorio)
+
+        sql += " ORDER BY l.fecha_vencimiento ASC, a.id_ampolla ASC"
+        cursor.execute(sql, parametros)
+        return cursor.fetchall()
+    finally:
+        conexion.close()
 
 def listar_stock_por_vacunatorio(id_vacunatorio: int = None):
-    return obtener_stock_por_vacunatorio(id_vacunatorio)
+    conexion = obtener_conexion()
+    try:
+        cursor = conexion.cursor()
+        sql = """
+            SELECT
+                v.id_vacuna,
+                v.nombre AS nombre_vacuna,
+                v.fabricante,
+                COUNT(a.id_ampolla) AS cantidad_ampollas,
+                SUM(a.dosis_disponibles) AS dosis_disponibles,
+                MIN(l.fecha_vencimiento) AS proximo_vencimiento
+            FROM AMPOLLA a
+            INNER JOIN LOTE l ON a.id_lote = l.id_lote
+            INNER JOIN VACUNA v ON l.id_vacuna = v.id_vacuna
+            WHERE a.dosis_disponibles > 0
+        """
+        parametros = []
+        if id_vacunatorio is not None:
+            sql += " AND a.id_vacunatorio_actual = ?"
+            parametros.append(id_vacunatorio)
+
+        sql += " GROUP BY v.id_vacuna, v.nombre, v.fabricante ORDER BY v.nombre"
+        cursor.execute(sql, parametros)
+        return cursor.fetchall()
+    finally:
+        conexion.close()
 
 def registrar_descuento_dosis(id_ampolla: int, dosis: int = 1):
     return descontar_dosis_ampolla(id_ampolla, dosis)

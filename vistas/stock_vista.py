@@ -415,31 +415,7 @@ class FrameStock(ctk.CTkFrame):
         self.tarjeta_dosis.configure(text=str(resumen_numerico["dosis_disponibles"]))
 
         self._limpiar_contenedor(self.lista_resumen)
-        if id_vacunatorio is not None:
-            filas = listar_stock_por_vacunatorio(id_vacunatorio)
-        else:
-            # "Todos": agrupo por vacuna sumando todos los vacunatorios,
-            # reutilizando listar_stock_por_vacunatorio por cada uno.
-            acumulado = {}
-            for vacunatorio in self.vacunatorios:
-                for fila in listar_stock_por_vacunatorio(vacunatorio["id_vacunatorio"]):
-                    clave = fila["id_vacuna"]
-                    if clave not in acumulado:
-                        acumulado[clave] = {
-                            "nombre_vacuna": fila["nombre_vacuna"],
-                            "fabricante": fila["fabricante"],
-                            "cantidad_ampollas": 0,
-                            "dosis_disponibles": 0,
-                            "proximo_vencimiento": None,
-                        }
-                    acumulado[clave]["cantidad_ampollas"] += fila["cantidad_ampollas"]
-                    acumulado[clave]["dosis_disponibles"] += fila["dosis_disponibles"]
-                    if fila["proximo_vencimiento"] is not None:
-                        actual = acumulado[clave]["proximo_vencimiento"]
-                        if actual is None or fila["proximo_vencimiento"] < actual:
-                            acumulado[clave]["proximo_vencimiento"] = fila["proximo_vencimiento"]
-
-            filas = sorted(acumulado.values(), key=lambda fila: fila["nombre_vacuna"])
+        filas = listar_stock_por_vacunatorio(id_vacunatorio)
 
         columnas = (
             ("Vacuna", 1),
