@@ -34,6 +34,17 @@ class FrameStock(ctk.CTkFrame):
         if self.datos_disponibles:
             self._cargar_stock()
 
+    def _actualizar_color_texto_pestanas(self):
+        botones = self.pestanas._segmented_button._buttons_dict
+        seleccionada = self.pestanas.get()
+        for nombre, boton in botones.items():
+            boton.configure(
+                text_color=(
+                    "white" if nombre == seleccionada
+                    else tema.TEXTO_PESTANA_INACTIVA
+                )
+            )
+
     # ------------------------------------------------------------------
     # Construcción de la interfaz
     # ------------------------------------------------------------------
@@ -128,9 +139,10 @@ class FrameStock(ctk.CTkFrame):
             segmented_button_selected_color=tema.PRINCIPAL,
             segmented_button_selected_hover_color=tema.HOVER,
             segmented_button_unselected_color=tema.CLARO,
-            segmented_button_unselected_hover_color=tema.SUAVE,
-            text_color=("white", "white"),
+            segmented_button_unselected_hover_color=tema.HOVER,
+            text_color=tema.TEXTO,
             text_color_disabled=tema.TEXTO_SUAVE,
+            command=self._actualizar_color_texto_pestanas,
         )
         self.pestanas.pack(fill="both", expand=True, padx=2, pady=2)
 
@@ -138,6 +150,7 @@ class FrameStock(ctk.CTkFrame):
         self.tab_comparativa = self.pestanas.add("Stock por vacunatorio")
         self.tab_detalle = self.pestanas.add("Detalle de ampollas")
         self.tab_alta = self.pestanas.add("Cargar nuevo stock")
+        self._actualizar_color_texto_pestanas()
 
         self.lista_resumen = ctk.CTkScrollableFrame(self.tab_resumen, fg_color="transparent")
         self.lista_resumen.pack(fill="both", expand=True, padx=4, pady=4)
@@ -272,7 +285,7 @@ class FrameStock(ctk.CTkFrame):
             return
 
         try:
-            datetime.strptime(fecha_vencimiento, "%Y-%m-%d")
+            datetime.strptime(fecha_vencimiento, "%d %m %Y ")   
         except ValueError:
             self.etiqueta_error_alta.configure(text="La fecha debe tener el formato AAAA-MM-DD.")
             return

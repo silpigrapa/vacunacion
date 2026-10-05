@@ -116,7 +116,7 @@ def registrar_ingreso_central(
     dosis_por_ampolla=1,
 ):
     """
-    Registra la llegada de un lote al hospital central: reutiliza la
+    Registra la llegada de un lote al vacunatorio central: reutiliza la
     vacuna del catálogo si ya existe (por nombre) o la crea si es
     nueva, da de alta el lote y genera una AMPOLLA por cada unidad
     física indicada en cantidad_ampollas (cada una arranca con
