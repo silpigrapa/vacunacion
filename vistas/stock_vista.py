@@ -1,92 +1,183 @@
 """
-Pantalla de Stock / Ampollas.
-
-Tres funciones en una pantalla:
-  1. Comparativa de stock de una vacuna en TODOS los vacunatorios
-     (para saber quién puede cubrir un faltante).
-  2. Detalle de ampollas de un vacunatorio puntual (con su estado:
-     Utilizable, Vencida o Agotada).
-  3. Alta de nuevo stock: carga un lote nuevo y genera sus ampollas.
+Vista de Stock
 """
 
-from datetime import datetime
+from datetime import date, datetime
 
 import customtkinter as ctk
 
-from modelos.vacuna import listar_vacunas
-from modelos.vacunatorio import listar_vacunatorios
-from modelos.lote import crear_lote
 from modelos.ampolla import (
     crear_ampolla,
     listar_ampollas_por_vacunatorio,
     obtener_stock_por_vacunatorio,
 )
+from modelos.lote import crear_lote
+from modelos.stock import (
+    listar_ampollas_detalle,
+    listar_stock_por_vacunatorio,
+    obtener_resumen_stock,
+)
+from modelos.vacuna import listar_vacunas
+from modelos.vacunatorio import listar_vacunatorios, obtener_vacunatorio_central
+from vistas import tema
 
 
 class FrameStock(ctk.CTkFrame):
-    def __init__(self, master):
+    def __init__(self, master, usuario_logueado=None):
         super().__init__(master, fg_color="transparent")
-        self.vacunas = listar_vacunas()
-        self.vacunatorios = listar_vacunatorios()
+        self.usuario_logueado = usuario_logueado
+        self.vacunas = list(listar_vacunas())
+        self.vacunatorios = list(listar_vacunatorios())
+        self.mapa_vacunatorios = {v["nombre"]: v["id_vacunatorio"] for v in self.vacunatorios}
+        self.datos_disponibles = bool(self.vacunas and self.vacunatorios)
         self._construir_widgets()
+        if self.datos_disponibles:
+            self._cargar_stock()
 
     # ------------------------------------------------------------------
     # Construcción de la interfaz
     # ------------------------------------------------------------------
     def _construir_widgets(self):
-        ctk.CTkLabel(
-            self, text="Stock de vacunas",
-            font=ctk.CTkFont(size=18, weight="bold")
-        ).pack(pady=(10, 15), anchor="w", padx=10)
+        cabecera = ctk.CTkFrame(self, fg_color="transparent")
+        cabecera.pack(fill="x", padx=4, pady=(0, 8))
 
-        if not self.vacunas or not self.vacunatorios:
+        franja = ctk.CTkFrame(
+            cabecera, height=4, corner_radius=tema.RADIO_NULO, fg_color=tema.PRINCIPAL
+        )
+        franja.pack(fill="x", pady=(0, 10))
+
+        fila_titulo = ctk.CTkFrame(cabecera, fg_color="transparent")
+        fila_titulo.pack(fill="x")
+
+        ctk.CTkLabel(
+            fila_titulo,
+            text="Stock de vacunas",
+            font=ctk.CTkFont(size=18, weight="bold"),
+            text_color=tema.OSCURO,
+            anchor="w",
+        ).pack(side="left")
+
+        ctk.CTkLabel(
+            fila_titulo,
+            text="Vacunas cargadas y ampollas disponibles",
+            font=ctk.CTkFont(size=12),
+            text_color=tema.TEXTO_SUAVE,
+            anchor="e",
+        ).pack(side="right")
+
+        if not self.datos_disponibles:
             ctk.CTkLabel(
                 self,
                 text="Necesitás tener al menos una vacuna y un vacunatorio cargados para usar esta pantalla.",
-            ).pack(pady=40)
+                justify="left",
+            ).pack(pady=40, padx=10, anchor="w")
             return
 
-        pestañas = ctk.CTkTabview(self)
-        pestañas.pack(fill="both", expand=True, padx=10, pady=(0, 10))
-
-        tab_comparativa = pestañas.add("Stock por vacunatorio")
-        tab_detalle = pestañas.add("Detalle de ampollas")
-        tab_alta = pestañas.add("Cargar nuevo stock")
-
-        self._construir_tab_comparativa(tab_comparativa)
-        self._construir_tab_detalle(tab_detalle)
-        self._construir_tab_alta(tab_alta)
-
-    # ------------------------------------------------------------------
-    # Tab 1: comparativa de stock por vacunatorio
-    # ------------------------------------------------------------------
-    def _construir_tab_comparativa(self, tab):
-        fila = ctk.CTkFrame(tab, fg_color="transparent")
-        fila.pack(fill="x", pady=(10, 15), padx=10)
-
-        ctk.CTkLabel(fila, text="Vacuna:").pack(side="left", padx=(0, 10))
-        self.combo_vacuna_comparativa = ctk.CTkComboBox(
-            fila, values=[v["nombre"] for v in self.vacunas],
-            command=lambda _: self._refrescar_comparativa(),
-            state="readonly", width=280,
+        barra_filtro = ctk.CTkFrame(
+            self,
+            fg_color=tema.CLARO,
+            corner_radius=tema.RADIO,
+            border_width=1,
+            border_color=tema.BORDE,
         )
-        self.combo_vacuna_comparativa.pack(side="left")
-        self.combo_vacuna_comparativa.set(self.vacunas[0]["nombre"])
+        barra_filtro.pack(fill="x", padx=2, pady=(0, 10))
 
-        self.marco_comparativa = ctk.CTkScrollableFrame(tab)
-        self.marco_comparativa.pack(fill="both", expand=True, padx=10, pady=(0, 10))
+        ctk.CTkLabel(
+            barra_filtro,
+            text="Vacunatorio:",
+            font=ctk.CTkFont(size=13, weight="bold"),
+            text_color=tema.OSCURO,
+        ).pack(side="left", padx=(14, 8), pady=10)
 
+        nombres_vacunatorios = ["Todos"] + [v["nombre"] for v in self.vacunatorios]
+        self.selector_vacunatorio = ctk.CTkOptionMenu(
+            barra_filtro,
+            values=nombres_vacunatorios,
+            fg_color=tema.PRINCIPAL,
+            button_color=tema.PRINCIPAL,
+            button_hover_color=tema.HOVER,
+            command=lambda _seleccion: self._cargar_stock(),
+        )
+        self.selector_vacunatorio.set(self._vacunatorio_por_defecto(nombres_vacunatorios))
+        self.selector_vacunatorio.pack(side="left", pady=8)
+
+        ctk.CTkButton(
+            barra_filtro,
+            text="Actualizar",
+            width=110,
+            height=30,
+            corner_radius=tema.RADIO,
+            fg_color=tema.OSCURO,
+            hover_color=tema.HOVER,
+            command=self._cargar_stock,
+        ).pack(side="right", padx=14, pady=8)
+
+        self.marco_resumen = ctk.CTkFrame(self, fg_color="transparent")
+        self.marco_resumen.pack(fill="x", padx=2, pady=(0, 10))
+        self.marco_resumen.grid_columnconfigure((0, 1, 2), weight=1)
+
+        self.tarjeta_vacunas = self._tarjeta_resumen(self.marco_resumen, 0, "Vacunas con stock")
+        self.tarjeta_ampollas = self._tarjeta_resumen(self.marco_resumen, 1, "Ampollas disponibles")
+        self.tarjeta_dosis = self._tarjeta_resumen(self.marco_resumen, 2, "Dosis disponibles")
+
+        self.pestanas = ctk.CTkTabview(
+            self,
+            corner_radius=tema.RADIO,
+            border_width=1,
+            border_color=tema.BORDE,
+            segmented_button_selected_color=tema.PRINCIPAL,
+            segmented_button_selected_hover_color=tema.HOVER,
+            segmented_button_unselected_color=tema.CLARO,
+            segmented_button_unselected_hover_color=tema.SUAVE,
+            text_color=("white", "white"),
+            text_color_disabled=tema.TEXTO_SUAVE,
+        )
+        self.pestanas.pack(fill="both", expand=True, padx=2, pady=2)
+
+        self.tab_resumen = self.pestanas.add("Stock por vacuna")
+        self.tab_comparativa = self.pestanas.add("Stock por vacunatorio")
+        self.tab_detalle = self.pestanas.add("Detalle de ampollas")
+        self.tab_alta = self.pestanas.add("Cargar nuevo stock")
+
+        self.lista_resumen = ctk.CTkScrollableFrame(self.tab_resumen, fg_color="transparent")
+        self.lista_resumen.pack(fill="both", expand=True, padx=4, pady=4)
+
+        self.marco_comparativa = ctk.CTkScrollableFrame(self.tab_comparativa, fg_color="transparent")
+        self.marco_comparativa.pack(fill="both", expand=True, padx=10, pady=10)
+
+        self.lista_detalle = ctk.CTkScrollableFrame(self.tab_detalle, fg_color="transparent")
+        self.lista_detalle.pack(fill="both", expand=True, padx=4, pady=4)
+
+        self._construir_tab_alta(self.tab_alta)
         self._refrescar_comparativa()
 
+    # ------------------------------------------------------------------
+    # Tab: comparativa por vacunatorio (para saber quién puede cubrir
+    # un faltante de una vacuna puntual)
+    # ------------------------------------------------------------------
     def _id_vacuna_por_nombre(self, nombre):
-        for v in self.vacunas:
-            if v["nombre"] == nombre:
-                return v["id_vacuna"]
+        for vacuna in self.vacunas:
+            if vacuna["nombre"] == nombre:
+                return vacuna["id_vacuna"]
         return None
 
     def _refrescar_comparativa(self):
         for widget in self.marco_comparativa.winfo_children():
             widget.destroy()
+
+        fila = ctk.CTkFrame(self.marco_comparativa, fg_color="transparent")
+        fila.pack(fill="x", pady=(10, 15), padx=10)
+
+        ctk.CTkLabel(fila, text="Vacuna:").pack(side="left", padx=(0, 10))
+        self.combo_vacuna_comparativa = ctk.CTkComboBox(
+            fila,
+            values=[v["nombre"] for v in self.vacunas],
+            command=lambda _: self._refrescar_comparativa(),
+            state="readonly",
+            width=280,
+        )
+        self.combo_vacuna_comparativa.pack(side="left")
+        self.combo_vacuna_comparativa.set(self.vacunas[0]["nombre"])
 
         id_vacuna = self._id_vacuna_por_nombre(self.combo_vacuna_comparativa.get())
         if id_vacuna is None:
@@ -103,92 +194,46 @@ class FrameStock(ctk.CTkFrame):
             side="right", padx=10
         )
 
-        for f in filas:
+        for fila_stock in filas:
             fila_widget = ctk.CTkFrame(self.marco_comparativa)
             fila_widget.pack(fill="x", pady=2)
-            ctk.CTkLabel(fila_widget, text=f["nombre"]).pack(side="left", padx=10, pady=6)
+            ctk.CTkLabel(fila_widget, text=fila_stock["nombre"]).pack(side="left", padx=10, pady=6)
 
-            color = None
-            if f["stock"] == 0:
-                color = "#b3261e"  # sin stock: destacar en rojo
+            color = "#b3261e" if fila_stock["stock"] == 0 else None
             ctk.CTkLabel(
-                fila_widget, text=str(f["stock"]), text_color=color
+                fila_widget, text=str(fila_stock["stock"]), text_color=color
             ).pack(side="right", padx=10, pady=6)
 
     # ------------------------------------------------------------------
-    # Tab 2: detalle de ampollas de un vacunatorio
-    # ------------------------------------------------------------------
-    def _construir_tab_detalle(self, tab):
-        fila = ctk.CTkFrame(tab, fg_color="transparent")
-        fila.pack(fill="x", pady=(10, 15), padx=10)
-
-        ctk.CTkLabel(fila, text="Vacunatorio:").pack(side="left", padx=(0, 10))
-        self.combo_vacunatorio_detalle = ctk.CTkComboBox(
-            fila, values=[v["nombre"] for v in self.vacunatorios],
-            command=lambda _: self._refrescar_detalle(),
-            state="readonly", width=280,
-        )
-        self.combo_vacunatorio_detalle.pack(side="left")
-        self.combo_vacunatorio_detalle.set(self.vacunatorios[0]["nombre"])
-
-        self.marco_detalle = ctk.CTkScrollableFrame(tab)
-        self.marco_detalle.pack(fill="both", expand=True, padx=10, pady=(0, 10))
-
-        self._refrescar_detalle()
-
-    def _id_vacunatorio_por_nombre(self, nombre):
-        for v in self.vacunatorios:
-            if v["nombre"] == nombre:
-                return v["id_vacunatorio"]
-        return None
-
-    def _refrescar_detalle(self):
-        for widget in self.marco_detalle.winfo_children():
-            widget.destroy()
-
-        id_vacunatorio = self._id_vacunatorio_por_nombre(self.combo_vacunatorio_detalle.get())
-        if id_vacunatorio is None:
-            return
-
-        ampollas = listar_ampollas_por_vacunatorio(id_vacunatorio)
-
-        if not ampollas:
-            ctk.CTkLabel(self.marco_detalle, text="No hay ampollas cargadas para este vacunatorio.").pack(pady=20)
-            return
-
-        colores_estado = {
-            "Utilizable": "#0f6e56",
-            "Vencida": "#993c1d",
-            "Agotada": "gray50",
-        }
-
-        for a in ampollas:
-            fila_widget = ctk.CTkFrame(self.marco_detalle)
-            fila_widget.pack(fill="x", pady=3)
-
-            texto = (
-                f"{a['vacuna_nombre']}  ·  Lote {a['numero_lote']}  ·  "
-                f"Vence {a['fecha_vencimiento']}  ·  {a['dosis_disponibles']} dosis"
-            )
-            ctk.CTkLabel(fila_widget, text=texto, anchor="w").pack(
-                side="left", padx=10, pady=8, fill="x", expand=True
-            )
-            ctk.CTkLabel(
-                fila_widget, text=a["estado"],
-                text_color=colores_estado.get(a["estado"], None),
-                font=ctk.CTkFont(weight="bold"),
-            ).pack(side="right", padx=10)
-
-    # ------------------------------------------------------------------
-    # Tab 3: alta de nuevo stock (lote + ampollas)
+    # Tab: alta de nuevo stock (siempre al vacunatorio central)
     # ------------------------------------------------------------------
     def _construir_tab_alta(self, tab):
+        central = obtener_vacunatorio_central()
+        if central is None:
+            ctk.CTkLabel(
+                tab,
+                text=(
+                    "Todavía no hay ningún vacunatorio marcado como central.\n"
+                    "Definilo desde la pantalla de Vacunatorios antes de cargar stock."
+                ),
+                justify="left",
+            ).pack(anchor="w", padx=15, pady=15)
+            return
+
+        self.id_vacunatorio_central = central["id_vacunatorio"]
+
         ctk.CTkLabel(tab, text="Vacunatorio").pack(anchor="w", padx=15, pady=(15, 0))
-        self.combo_vacunatorio_alta = ctk.CTkComboBox(
-            tab, values=[v["nombre"] for v in self.vacunatorios], state="readonly"
-        )
-        self.combo_vacunatorio_alta.pack(fill="x", padx=15, pady=(0, 10))
-        self.combo_vacunatorio_alta.set(self.vacunatorios[0]["nombre"])
+        ctk.CTkLabel(
+            tab,
+            text=f"{central['nombre']}  ⭐ Central",
+            font=ctk.CTkFont(weight="bold"),
+        ).pack(anchor="w", padx=15, pady=(0, 10))
+        ctk.CTkLabel(
+            tab,
+            text="Solo el vacunatorio central recibe stock nuevo directamente; los demás lo reciben por transferencia.",
+            font=ctk.CTkFont(size=11),
+            text_color="gray",
+        ).pack(anchor="w", padx=15, pady=(0, 10))
 
         ctk.CTkLabel(tab, text="Vacuna").pack(anchor="w", padx=15)
         self.combo_vacuna_alta = ctk.CTkComboBox(
@@ -212,12 +257,11 @@ class FrameStock(ctk.CTkFrame):
         self.etiqueta_error_alta = ctk.CTkLabel(tab, text="", text_color="red")
         self.etiqueta_error_alta.pack(anchor="w", padx=15)
 
-        ctk.CTkButton(
-            tab, text="Cargar stock", command=self._cargar_stock
-        ).pack(anchor="w", padx=15, pady=15)
+        ctk.CTkButton(tab, text="Cargar stock", command=self._guardar_stock_nuevo).pack(
+            anchor="w", padx=15, pady=15
+        )
 
-    def _cargar_stock(self):
-        nombre_vacunatorio = self.combo_vacunatorio_alta.get()
+    def _guardar_stock_nuevo(self):
         nombre_vacuna = self.combo_vacuna_alta.get()
         numero_lote = self.campo_numero_lote.get().strip()
         fecha_vencimiento = self.campo_fecha_vencimiento.get().strip()
@@ -238,7 +282,7 @@ class FrameStock(ctk.CTkFrame):
             return
 
         cantidad_ampollas = int(cantidad_texto)
-        id_vacunatorio = self._id_vacunatorio_por_nombre(nombre_vacunatorio)
+        id_vacunatorio = self.id_vacunatorio_central
         vacuna = next(v for v in self.vacunas if v["nombre"] == nombre_vacuna)
         id_vacuna = vacuna["id_vacuna"]
         dosis_por_ampolla = vacuna["dosis_por_ampolla"]
@@ -272,6 +316,195 @@ class FrameStock(ctk.CTkFrame):
         self.campo_fecha_vencimiento.delete(0, "end")
         self.campo_cantidad_ampollas.delete(0, "end")
 
-        # Refrescar las otras pestañas para que se vea el stock recién cargado
         self._refrescar_comparativa()
-        self._refrescar_detalle()
+        self._cargar_stock()
+
+    # ------------------------------------------------------------------
+    # Resumen principal y carga de datos (Stock por vacuna + Detalle)
+    # ------------------------------------------------------------------
+    def _vacunatorio_por_defecto(self, nombres_vacunatorios):
+        if self.usuario_logueado is not None:
+            for vacunatorio in self.vacunatorios:
+                if vacunatorio["id_vacunatorio"] == self.usuario_logueado["id_vacunatorio"]:
+                    return vacunatorio["nombre"]
+        return nombres_vacunatorios[0] if nombres_vacunatorios else ""
+
+    def _tarjeta_resumen(self, padre, columna, titulo):
+        tarjeta = ctk.CTkFrame(
+            padre,
+            fg_color=tema.FONDO_PANEL,
+            corner_radius=tema.RADIO,
+            border_width=1,
+            border_color=tema.BORDE,
+        )
+        tarjeta.grid(row=0, column=columna, sticky="nsew", padx=(0 if columna == 0 else 6, 0))
+
+        ctk.CTkLabel(
+            tarjeta,
+            text=titulo,
+            font=ctk.CTkFont(size=12),
+            text_color=tema.TEXTO_SUAVE,
+        ).pack(anchor="w", padx=14, pady=(10, 0))
+
+        etiqueta_valor = ctk.CTkLabel(
+            tarjeta,
+            text="0",
+            font=ctk.CTkFont(size=24, weight="bold"),
+            text_color=tema.OSCURO,
+        )
+        etiqueta_valor.pack(anchor="w", padx=14, pady=(0, 12))
+        return etiqueta_valor
+
+    def _encabezado(self, padre, columnas):
+        fila = ctk.CTkFrame(padre, fg_color=tema.OSCURO, corner_radius=tema.RADIO, height=34)
+        fila.pack(fill="x", pady=(0, 4))
+        fila.pack_propagate(False)
+
+        for texto, peso in columnas:
+            ctk.CTkLabel(
+                fila,
+                text=texto,
+                font=ctk.CTkFont(size=12, weight="bold"),
+                text_color="white",
+                anchor="w",
+            ).pack(side="left", fill="x", expand=(peso > 0), padx=10, pady=6)
+
+    def _fila(self, padre, valores, alterna=False, color_texto=None):
+        fila = ctk.CTkFrame(
+            padre,
+            fg_color=tema.FILA_ALT if alterna else tema.FONDO_PANEL,
+            corner_radius=tema.RADIO,
+            border_width=1,
+            border_color=tema.BORDE,
+            height=36,
+        )
+        fila.pack(fill="x", pady=1)
+        fila.pack_propagate(False)
+
+        for valor in valores:
+            ctk.CTkLabel(
+                fila,
+                text=str(valor),
+                font=ctk.CTkFont(size=12),
+                text_color=color_texto or tema.TEXTO,
+                anchor="w",
+            ).pack(side="left", fill="x", expand=True, padx=10, pady=6)
+
+    def _vacio(self, padre, mensaje):
+        ctk.CTkLabel(
+            padre,
+            text=mensaje,
+            font=ctk.CTkFont(size=13),
+            text_color=tema.TEXTO_SUAVE,
+        ).pack(pady=40)
+
+    def _limpiar_contenedor(self, contenedor):
+        for widget in contenedor.winfo_children():
+            widget.destroy()
+
+    def _id_vacunatorio_seleccionado(self):
+        nombre = self.selector_vacunatorio.get()
+        return self.mapa_vacunatorios.get(nombre)
+
+    def _cargar_stock(self):
+        id_vacunatorio = self._id_vacunatorio_seleccionado()
+
+        resumen_numerico = obtener_resumen_stock(id_vacunatorio)
+        self.tarjeta_vacunas.configure(text=str(resumen_numerico["vacunas_con_stock"]))
+        self.tarjeta_ampollas.configure(text=str(resumen_numerico["ampollas_con_stock"]))
+        self.tarjeta_dosis.configure(text=str(resumen_numerico["dosis_disponibles"]))
+
+        self._limpiar_contenedor(self.lista_resumen)
+        if id_vacunatorio is not None:
+            filas = listar_stock_por_vacunatorio(id_vacunatorio)
+        else:
+            # "Todos": agrupo por vacuna sumando todos los vacunatorios,
+            # reutilizando listar_stock_por_vacunatorio por cada uno.
+            acumulado = {}
+            for vacunatorio in self.vacunatorios:
+                for fila in listar_stock_por_vacunatorio(vacunatorio["id_vacunatorio"]):
+                    clave = fila["id_vacuna"]
+                    if clave not in acumulado:
+                        acumulado[clave] = {
+                            "nombre_vacuna": fila["nombre_vacuna"],
+                            "fabricante": fila["fabricante"],
+                            "cantidad_ampollas": 0,
+                            "dosis_disponibles": 0,
+                            "proximo_vencimiento": None,
+                        }
+                    acumulado[clave]["cantidad_ampollas"] += fila["cantidad_ampollas"]
+                    acumulado[clave]["dosis_disponibles"] += fila["dosis_disponibles"]
+                    if fila["proximo_vencimiento"] is not None:
+                        actual = acumulado[clave]["proximo_vencimiento"]
+                        if actual is None or fila["proximo_vencimiento"] < actual:
+                            acumulado[clave]["proximo_vencimiento"] = fila["proximo_vencimiento"]
+
+            filas = sorted(acumulado.values(), key=lambda fila: fila["nombre_vacuna"])
+
+        columnas = (
+            ("Vacuna", 1),
+            ("Fabricante", 1),
+            ("Ampollas", 1),
+            ("Dosis disponibles", 1),
+            ("Próximo vencimiento", 1),
+        )
+
+        if not filas:
+            self._vacio(self.lista_resumen, "No hay stock cargado para este filtro.")
+        else:
+            self._encabezado(self.lista_resumen, columnas)
+            hoy = date.today().isoformat()
+            for i, fila in enumerate(filas):
+                vencimiento = fila["proximo_vencimiento"] or "-"
+                color = tema.ERROR if (vencimiento != "-" and vencimiento < hoy) else None
+                self._fila(
+                    self.lista_resumen,
+                    (
+                        fila["nombre_vacuna"],
+                        fila["fabricante"] or "-",
+                        fila["cantidad_ampollas"],
+                        fila["dosis_disponibles"],
+                        vencimiento,
+                    ),
+                    alterna=i % 2 == 1,
+                    color_texto=color,
+                )
+
+        self._limpiar_contenedor(self.lista_detalle)
+        ampollas = listar_ampollas_detalle(id_vacunatorio=id_vacunatorio)
+        if not ampollas:
+            self._vacio(self.lista_detalle, "No hay ampollas con stock para este filtro.")
+            return
+
+        columnas_detalle = [
+            ("Vacuna", 1),
+            ("N° lote", 1),
+            ("Vencimiento", 1),
+            ("Dosis restantes", 1),
+            ("Estado", 1),
+        ]
+        if id_vacunatorio is None:
+            columnas_detalle.append(("Vacunatorio", 1))
+
+        self._encabezado(self.lista_detalle, columnas_detalle)
+        hoy = date.today().isoformat()
+        for i, ampolla in enumerate(ampollas):
+            vencida = ampolla["fecha_vencimiento"] < hoy
+            estado = "Vencida" if vencida else ("Abierta" if ampolla["fecha_apertura"] else "Cerrada")
+
+            valores = [
+                ampolla["nombre_vacuna"],
+                ampolla["numero_lote"],
+                ampolla["fecha_vencimiento"],
+                ampolla["dosis_disponibles"],
+                estado,
+            ]
+            if id_vacunatorio is None:
+                valores.append(ampolla["nombre_vacunatorio"])
+
+            self._fila(
+                self.lista_detalle,
+                valores,
+                alterna=i % 2 == 1,
+                color_texto=tema.ERROR if vencida else None,
+            )
