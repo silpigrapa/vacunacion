@@ -92,6 +92,23 @@ def obtener_establecimientos_del_csv(ruta_archivo):
     return establecimientos
 
 
+def obtener_vacunas_del_csv(ruta_archivo):
+    """
+    Devuelve los nombres distintos de la columna 'Vacuna', conservando
+    el texto del archivo para sugerirlo al cargar vacunas en el catálogo.
+    """
+    archivo, lector = _encontrar_encabezado_y_filas(ruta_archivo)
+    vacunas = set()
+    try:
+        for fila in lector:
+            nombre = _limpiar_valor(fila.get("Vacuna"))
+            if nombre:
+                vacunas.add(nombre)
+    finally:
+        archivo.close()
+    return vacunas
+
+
 def _ya_existe_aplicacion(cursor, fecha_aplicacion, dni, vacuna_nombre, dosis, id_vacunatorio):
     """
     Verifica si esta aplicación puntual ya fue importada antes,

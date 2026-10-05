@@ -8,7 +8,11 @@ from datetime import date, datetime
 import customtkinter as ctk
 from tkinter import ttk
 
-from modelos.vacuna import listar_vacunas, registrar_ingreso_central
+from modelos.vacuna import (
+    listar_opciones_vacuna_csv,
+    listar_vacunas,
+    registrar_ingreso_central,
+)
 from modelos.lote import listar_lotes
 from modelos.vacunatorio import obtener_vacunatorio_central
 from vistas import tema
@@ -243,7 +247,7 @@ class FrameVacunas(ctk.CTkFrame):
         fila1.pack(fill="x", padx=12, pady=(4, 6))
         fila1.grid_columnconfigure((0, 1), weight=1)
 
-        self.campo_nombre = self._campo_grid(fila1, 0, "Nombre de la vacuna *")
+        self.campo_nombre = self._campo_nombre_vacuna(fila1, 0)
         self.campo_fabricante = self._campo_grid(fila1, 1, "Fabricante")
 
         fila2 = ctk.CTkFrame(seccion_vacuna, fg_color="transparent")
@@ -315,6 +319,48 @@ class FrameVacunas(ctk.CTkFrame):
             hover_color=tema.HOVER,
             command=self._guardar_llegada,
         ).pack(side="right")
+
+    def _campo_nombre_vacuna(self, padre, columna):
+        caja = ctk.CTkFrame(padre, fg_color="transparent")
+        caja.grid(row=0, column=columna, sticky="nsew")
+
+        opciones = listar_opciones_vacuna_csv()
+        ctk.CTkLabel(
+            caja,
+            text=(
+                "Opciones detectadas en los CSV"
+                if opciones
+                else "Seleccioná primero un CSV en Importar aplicaciones"
+            ),
+            font=ctk.CTkFont(size=12),
+            text_color=tema.TEXTO_SUAVE,
+            anchor="w",
+        ).pack(fill="x", pady=(0, 4))
+
+        self.selector_vacunas_csv = ctk.CTkComboBox(
+            caja,
+            values=opciones,
+            state="readonly" if opciones else "disabled",
+            height=34,
+            corner_radius=tema.RADIO,
+            border_color=tema.BORDE,
+            command=self._seleccionar_vacuna_csv,
+        )
+        self.selector_vacunas_csv.pack(fill="x")
+
+        self.campo_nombre = ctk.CTkEntry(
+            caja,
+            height=34,
+            corner_radius=tema.RADIO,
+            border_color=tema.BORDE,
+            placeholder_text="Elegí una opción o editá/escribí el nombre",
+        )
+        self.campo_nombre.pack(fill="x")
+        return self.campo_nombre
+
+    def _seleccionar_vacuna_csv(self, nombre):
+        self.campo_nombre.delete(0, "end")
+        self.campo_nombre.insert(0, nombre)
 
     def _seccion(self, padre, titulo):
         marco = ctk.CTkFrame(

@@ -43,6 +43,13 @@ CREATE TABLE VACUNA (
 );
 
 -- =====================================================
+-- OPCIONES DE VACUNAS DETECTADAS EN ARCHIVOS CSV
+-- =====================================================
+CREATE TABLE OPCION_VACUNA_CSV (
+    nombre  TEXT PRIMARY KEY
+);
+
+-- =====================================================
 -- LOTE
 -- =====================================================
 CREATE TABLE LOTE (

@@ -62,6 +62,32 @@ def listar_vacunas():
     return filas
 
 
+def guardar_opciones_vacuna_csv(nombres):
+    """Agrega al banco los nombres de vacuna encontrados en un CSV."""
+    conexion = obtener_conexion()
+    try:
+        cursor = conexion.cursor()
+        cursor.executemany(
+            "INSERT OR IGNORE INTO OPCION_VACUNA_CSV (nombre) VALUES (?)",
+            [(nombre,) for nombre in nombres],
+        )
+        conexion.commit()
+        return cursor.rowcount
+    finally:
+        conexion.close()
+
+
+def listar_opciones_vacuna_csv():
+    """Lista los nombres únicos detectados en los CSV seleccionados."""
+    conexion = obtener_conexion()
+    try:
+        cursor = conexion.cursor()
+        cursor.execute("SELECT nombre FROM OPCION_VACUNA_CSV ORDER BY nombre COLLATE NOCASE")
+        return [fila["nombre"] for fila in cursor.fetchall()]
+    finally:
+        conexion.close()
+
+
 def actualizar_vacuna(id_vacuna, nombre, fabricante=None, dosis_requeridas=1, dosis_por_ampolla=1):
     conexion = obtener_conexion()
     cursor = conexion.cursor()
@@ -90,7 +116,7 @@ def registrar_ingreso_central(
     dosis_por_ampolla=1,
 ):
     """
-    Registra la llegada de un lote al hospital central: reutiliza la
+    Registra la llegada de un lote al vacunatorio central: reutiliza la
     vacuna del catálogo si ya existe (por nombre) o la crea si es
     nueva, da de alta el lote y genera una AMPOLLA por cada unidad
     física indicada en cantidad_ampollas (cada una arranca con

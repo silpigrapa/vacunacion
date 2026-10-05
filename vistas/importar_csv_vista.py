@@ -13,7 +13,12 @@ importación: solo los que el usuario elige acá.
 import customtkinter as ctk
 from tkinter import filedialog
 
-from modelos.importador_csv import importar_csv, obtener_establecimientos_del_csv
+from modelos.importador_csv import (
+    importar_csv,
+    obtener_establecimientos_del_csv,
+    obtener_vacunas_del_csv,
+)
+from modelos.vacuna import guardar_opciones_vacuna_csv
 from modelos.vacunatorio import crear_vacunatorio, listar_vacunatorios
 
 
@@ -80,11 +85,30 @@ class FrameImportarCSV(ctk.CTkFrame):
         if not ruta:
             return
 
+        try:
+            vacunas_csv = obtener_vacunas_del_csv(ruta)
+            guardar_opciones_vacuna_csv(vacunas_csv)
+        except Exception as error:
+            self.etiqueta_estado.configure(
+                text=f"No se pudieron cargar las opciones de vacunas: {error}"
+            )
+            return
+
         self.ruta_seleccionada = ruta
         self.etiqueta_archivo.configure(text=ruta, text_color=("black", "white"))
         self.boton_importar.configure(state="normal")
         self.boton_detectar.configure(state="normal")
-        self.etiqueta_estado.configure(text="")
+        if vacunas_csv:
+            self.etiqueta_estado.configure(
+                text=(
+                    f"Se agregaron {len(vacunas_csv)} nombres de vacuna al banco de opciones. "
+                    "Estarán disponibles en Gestión de vacunas."
+                )
+            )
+        else:
+            self.etiqueta_estado.configure(
+                text="El archivo no contiene nombres en la columna 'Vacuna'."
+            )
         self._limpiar_marco_faltantes()
 
     def _limpiar_marco_faltantes(self):
