@@ -131,19 +131,19 @@ class VentanaCalendario(ctk.CTkToplevel):
                 ).grid(row=fila, column=columna, padx=1, pady=1)
 
     def _cerrar(self):
-        """
-        Cierra el popup y le devuelve el foco del teclado a la ventana
-        principal. Con overrideredirect(True), al destruir el popup el
-        sistema no le devuelve el foco a la app y los campos no reciben teclas.
-        """
-        raiz = self.master.winfo_toplevel()
-        self.destroy()
-        raiz.after(10, raiz.focus_force)
-
-    def _elegir(self, dia):
-        fecha_elegida = date(self.anio, self.mes, dia)
-        self.al_elegir(fecha_elegida)
-        self._cerrar()
+            """
+            Cierra el popup y le devuelve el foco del teclado a la ventana
+            principal. Con overrideredirect(True), al destruir el popup el
+            sistema no le devuelve el foco a la app y los campos no reciben teclas.
+            """
+            raiz = self.master.winfo_toplevel()
+            self.destroy()
+            raiz.after(10, raiz.focus_force)
+    
+    def _elegir(self, dia): 
+            fecha_elegida = date(self.anio, self.mes, dia)
+            self.al_elegir(fecha_elegida)
+            self._cerrar()
 
 
 def _mostrar_selector_fecha(master, entrada, fecha_inicial=None):
