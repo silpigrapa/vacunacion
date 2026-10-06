@@ -68,11 +68,24 @@ class VentanaCalendario(ctk.CTkToplevel):
             command=self._mes_anterior,
         ).pack(side="left", padx=4, pady=4)
 
-        self.etiqueta_mes = ctk.CTkLabel(
-            cabecera, text="", font=ctk.CTkFont(size=13, weight="bold"),
-            text_color="white",
+                # [IA] Desplegables de mes y año en lugar del texto fijo del encabezado
+        centro = ctk.CTkFrame(cabecera, fg_color="transparent")
+        centro.pack(side="left", expand=True)
+
+        self.menu_mes = ctk.CTkOptionMenu(
+            centro, values=MESES, width=120, height=28,
+            command=self._al_elegir_mes,
         )
-        self.etiqueta_mes.pack(side="left", expand=True)
+        self.menu_mes.pack(side="left", padx=(0, 6))
+
+        anio_actual = date.today().year
+        self.menu_anio = ctk.CTkOptionMenu(
+            centro,
+            values=[str(a) for a in range(anio_actual - 2, anio_actual + 11)],
+            width=80, height=28,
+            command=self._al_elegir_anio,
+        )
+        self.menu_anio.pack(side="left")
 
         ctk.CTkButton(
             cabecera, text="▶", width=32, height=28,
@@ -97,11 +110,22 @@ class VentanaCalendario(ctk.CTkToplevel):
             self.anio += 1
         self._dibujar_mes()
 
+            # [IA] Callbacks de los desplegables: actualizan mes/año y redibujan
+    def _al_elegir_mes(self, nombre_mes):
+        self.mes = MESES.index(nombre_mes) + 1
+        self._dibujar_mes()
+
+    def _al_elegir_anio(self, texto_anio):
+        self.anio = int(texto_anio)
+        self._dibujar_mes()
+
     def _dibujar_mes(self):
         for widget in self.marco_dias.winfo_children():
             widget.destroy()
 
-        self.etiqueta_mes.configure(text=f"{MESES[self.mes - 1]} {self.anio}")
+                # [IA] Mantiene los desplegables sincronizados (también cuando se usan las flechas)
+        self.menu_mes.set(MESES[self.mes - 1])
+        self.menu_anio.set(str(self.anio))
 
         for columna, nombre in enumerate(DIAS_SEMANA):
             ctk.CTkLabel(
