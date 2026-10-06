@@ -64,12 +64,7 @@ class FramePrincipal(ctk.CTkFrame):
 
     def _mostrar_bienvenida(self):
         self._limpiar_area_contenido()
-        ctk.CTkLabel(
-            self.area_contenido,
-            text="Seleccioná una opción del menú",
-            font=ctk.CTkFont(size=16),
-        ).pack(pady=40)
-
+        
         ###Notificaciones!!
         frame = FrameNotificaciones(self.area_contenido, self.usuario_logueado)
         frame.pack(fill="both", expand=True)

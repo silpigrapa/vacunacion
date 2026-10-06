@@ -20,7 +20,7 @@ from modelos.notificaciones import (
 )
 from vistas import tema
 
-COLOR_AVISO = "#B9770E"  # Color de próximo a vencer / stock bajo (Agregar este color en TEMA...)
+COLOR_AVISO = "#B9770E"  # color de próximo a vencer / stock bajo (Agregar en Tema o remplazar por uno que este ahí)
 COLOR_CRITICO = tema.ERROR  # rojo: vencido / sin stock
 
 
@@ -40,43 +40,14 @@ class FrameNotificaciones(ctk.CTkFrame):
         super().__init__(master, fg_color="transparent")
         self.id_vacunatorio = usuario_logueado["id_vacunatorio"]
         self.config_visible = False
+        self.notificaciones_visibles = True
         self._construir_widgets()
         self._cargar()
 
     # ------------------------------------------------------------------
-    # Estructura fija (cabecera + cuerpo desplazable)
+    # Estructura fija (mensaje de estado + cuerpo desplazable)
     # ------------------------------------------------------------------
     def _construir_widgets(self):
-        cabecera = ctk.CTkFrame(self, fg_color="transparent")
-        cabecera.pack(fill="x", padx=4, pady=(0, 8))
-
-        franja = ctk.CTkFrame(
-            cabecera, height=4, corner_radius=tema.RADIO_NULO, fg_color=tema.PRINCIPAL
-        )
-        franja.pack(fill="x", pady=(0, 10))
-
-        fila_titulo = ctk.CTkFrame(cabecera, fg_color="transparent")
-        fila_titulo.pack(fill="x")
-
-        ctk.CTkLabel(
-            fila_titulo,
-            text="Notificaciones",
-            font=ctk.CTkFont(size=18, weight="bold"),
-            text_color=tema.OSCURO,
-            anchor="w",
-        ).pack(side="left")
-
-        ctk.CTkButton(
-            fila_titulo,
-            text="Actualizar",
-            width=110,
-            height=30,
-            corner_radius=tema.RADIO,
-            fg_color=tema.OSCURO,
-            hover_color=tema.HOVER,
-            command=self._cargar,
-        ).pack(side="right")
-
         self.etiqueta_estado = ctk.CTkLabel(
             self, text="", anchor="w", font=ctk.CTkFont(size=12)
         )
@@ -100,9 +71,55 @@ class FrameNotificaciones(ctk.CTkFrame):
             self._mensaje(f"No se pudieron cargar las notificaciones: {error}", COLOR_CRITICO)
             return
 
+        total = len(lotes) + len(stock_bajo)
+
+        # Sin notificaciones, o el usuario las ocultó: solo el mensaje de siempre.
+        if total == 0 or not self.notificaciones_visibles:
+            ctk.CTkLabel(
+                self.cuerpo,
+                text="Seleccioná una opción del menú",
+                font=ctk.CTkFont(size=16),
+            ).pack(pady=(40, 16))
+            if total:
+                self._boton_alternar_notificaciones(f"Mostrar notificaciones ({total})")
+            self._seccion_configuracion(todas)
+            return
+
+        self._barra_superior()
         self._seccion_vencimientos(lotes)
         self._seccion_stock_bajo(stock_bajo)
         self._seccion_configuracion(todas)
+
+    def _barra_superior(self):
+        fila = ctk.CTkFrame(self.cuerpo, fg_color="transparent")
+        fila.pack(fill="x", pady=(0, 4))
+        ctk.CTkLabel(
+            fila,
+            text="Notificaciones",
+            font=ctk.CTkFont(size=18, weight="bold"),
+            text_color=tema.OSCURO,
+        ).pack(side="left", padx=4)
+        ctk.CTkButton(
+            fila, text="Actualizar", width=100, height=28, corner_radius=tema.RADIO,
+            fg_color=tema.OSCURO, hover_color=tema.HOVER, command=self._cargar,
+        ).pack(side="right", padx=(6, 4))
+        ctk.CTkButton(
+            fila, text="Ocultar", width=80, height=28, corner_radius=tema.RADIO,
+            fg_color=tema.CLARO, hover_color=tema.SUAVE, text_color=tema.OSCURO,
+            border_width=1, border_color=tema.BORDE,
+            command=self._alternar_notificaciones,
+        ).pack(side="right")
+
+    def _boton_alternar_notificaciones(self, texto):
+        ctk.CTkButton(
+            self.cuerpo, text=texto, height=30, corner_radius=tema.RADIO,
+            fg_color=tema.PRINCIPAL, hover_color=tema.HOVER,
+            command=self._alternar_notificaciones,
+        ).pack(pady=4)
+
+    def _alternar_notificaciones(self):
+        self.notificaciones_visibles = not self.notificaciones_visibles
+        self._cargar()
 
     def _mensaje(self, texto, color):
         self.etiqueta_estado.configure(text=texto, text_color=color)
@@ -136,7 +153,7 @@ class FrameNotificaciones(ctk.CTkFrame):
     # Sección 1: lotes por vencer
     # ------------------------------------------------------------------
     def _seccion_vencimientos(self, lotes):
-        self._titulo_seccion("Lotes por vencer o vencidos", len(lotes))
+        self._titulo_seccion("Lotes por vencer o que ya vencieron", len(lotes))
         if not lotes:
             self._sin_novedades("No hay lotes con stock próximos a vencer.")
             return
