@@ -149,7 +149,6 @@ class FrameStock(ctk.CTkFrame):
         self.tab_resumen = self.pestanas.add("Stock por vacuna")
         self.tab_comparativa = self.pestanas.add("Stock por vacunatorio")
         self.tab_detalle = self.pestanas.add("Detalle de ampollas")
-        self.tab_alta = self.pestanas.add("Cargar nuevo stock")
         self._actualizar_color_texto_pestanas()
 
         self.lista_resumen = ctk.CTkScrollableFrame(self.tab_resumen, fg_color="transparent")
@@ -161,7 +160,6 @@ class FrameStock(ctk.CTkFrame):
         self.lista_detalle = ctk.CTkScrollableFrame(self.tab_detalle, fg_color="transparent")
         self.lista_detalle.pack(fill="both", expand=True, padx=4, pady=4)
 
-        self._construir_tab_alta(self.tab_alta)
         self._refrescar_comparativa()
 
     # ------------------------------------------------------------------
@@ -220,117 +218,6 @@ class FrameStock(ctk.CTkFrame):
     # ------------------------------------------------------------------
     # Tab: alta de nuevo stock (siempre al vacunatorio central)
     # ------------------------------------------------------------------
-    def _construir_tab_alta(self, tab):
-        central = obtener_vacunatorio_central()
-        if central is None:
-            ctk.CTkLabel(
-                tab,
-                text=(
-                    "Todavía no hay ningún vacunatorio marcado como central.\n"
-                    "Definilo desde la pantalla de Vacunatorios antes de cargar stock."
-                ),
-                justify="left",
-            ).pack(anchor="w", padx=15, pady=15)
-            return
-
-        self.id_vacunatorio_central = central["id_vacunatorio"]
-
-        ctk.CTkLabel(tab, text="Vacunatorio").pack(anchor="w", padx=15, pady=(15, 0))
-        ctk.CTkLabel(
-            tab,
-            text=f"{central['nombre']}  ⭐ Central",
-            font=ctk.CTkFont(weight="bold"),
-        ).pack(anchor="w", padx=15, pady=(0, 10))
-        ctk.CTkLabel(
-            tab,
-            text="Solo el vacunatorio central recibe stock nuevo directamente; los demás lo reciben por transferencia.",
-            font=ctk.CTkFont(size=11),
-            text_color="gray",
-        ).pack(anchor="w", padx=15, pady=(0, 10))
-
-        ctk.CTkLabel(tab, text="Vacuna").pack(anchor="w", padx=15)
-        self.combo_vacuna_alta = ctk.CTkComboBox(
-            tab, values=[v["nombre"] for v in self.vacunas], state="readonly"
-        )
-        self.combo_vacuna_alta.pack(fill="x", padx=15, pady=(0, 10))
-        self.combo_vacuna_alta.set(self.vacunas[0]["nombre"])
-
-        ctk.CTkLabel(tab, text="Número de lote").pack(anchor="w", padx=15)
-        self.campo_numero_lote = ctk.CTkEntry(tab)
-        self.campo_numero_lote.pack(fill="x", padx=15, pady=(0, 10))
-
-        ctk.CTkLabel(tab, text="Fecha de vencimiento (AAAA-MM-DD)").pack(anchor="w", padx=15)
-        self.campo_fecha_vencimiento = ctk.CTkEntry(tab, placeholder_text="2027-01-31")
-        self.campo_fecha_vencimiento.pack(fill="x", padx=15, pady=(0, 10))
-
-        ctk.CTkLabel(tab, text="Cantidad de ampollas recibidas").pack(anchor="w", padx=15)
-        self.campo_cantidad_ampollas = ctk.CTkEntry(tab, placeholder_text="10")
-        self.campo_cantidad_ampollas.pack(fill="x", padx=15, pady=(0, 10))
-
-        self.etiqueta_error_alta = ctk.CTkLabel(tab, text="", text_color="red")
-        self.etiqueta_error_alta.pack(anchor="w", padx=15)
-
-        ctk.CTkButton(tab, text="Cargar stock", command=self._guardar_stock_nuevo).pack(
-            anchor="w", padx=15, pady=15
-        )
-
-    def _guardar_stock_nuevo(self):
-        nombre_vacuna = self.combo_vacuna_alta.get()
-        numero_lote = self.campo_numero_lote.get().strip()
-        fecha_vencimiento = self.campo_fecha_vencimiento.get().strip()
-        cantidad_texto = self.campo_cantidad_ampollas.get().strip()
-
-        if not numero_lote or not fecha_vencimiento or not cantidad_texto:
-            self.etiqueta_error_alta.configure(text="Completá todos los campos.")
-            return
-
-        try:
-            datetime.strptime(fecha_vencimiento, "%d %m %Y ")   
-        except ValueError:
-            self.etiqueta_error_alta.configure(text="La fecha debe tener el formato AAAA-MM-DD.")
-            return
-
-        if not cantidad_texto.isdigit() or int(cantidad_texto) <= 0:
-            self.etiqueta_error_alta.configure(text="La cantidad de ampollas debe ser un número mayor a 0.")
-            return
-
-        cantidad_ampollas = int(cantidad_texto)
-        id_vacunatorio = self.id_vacunatorio_central
-        vacuna = next(v for v in self.vacunas if v["nombre"] == nombre_vacuna)
-        id_vacuna = vacuna["id_vacuna"]
-        dosis_por_ampolla = vacuna["dosis_por_ampolla"]
-
-        try:
-            id_lote = crear_lote(
-                numero_lote=numero_lote,
-                fecha_vencimiento=fecha_vencimiento,
-                cantidad_ampollas=cantidad_ampollas,
-                id_vacuna=id_vacuna,
-                id_vacunatorio=id_vacunatorio,
-            )
-            for _ in range(cantidad_ampollas):
-                crear_ampolla(
-                    id_lote=id_lote,
-                    id_vacunatorio_actual=id_vacunatorio,
-                    dosis_disponibles=dosis_por_ampolla,
-                )
-        except Exception as error:
-            self.etiqueta_error_alta.configure(text=f"No se pudo cargar el stock: {error}")
-            return
-
-        self.etiqueta_error_alta.configure(
-            text_color=("black", "white"),
-            text=(
-                f"Se cargaron {cantidad_ampollas} ampollas del lote {numero_lote} "
-                f"({dosis_por_ampolla} dosis cada una)."
-            ),
-        )
-        self.campo_numero_lote.delete(0, "end")
-        self.campo_fecha_vencimiento.delete(0, "end")
-        self.campo_cantidad_ampollas.delete(0, "end")
-
-        self._refrescar_comparativa()
-        self._cargar_stock()
 
     # ------------------------------------------------------------------
     # Resumen principal y carga de datos (Stock por vacuna + Detalle)
