@@ -234,7 +234,7 @@ class FrameVacunas(ctk.CTkFrame):
 
         ctk.CTkLabel(
             fila_titulo,
-            text="Hospital central · ingreso y catálogo",
+            text="CIC · ingreso y catálogo",
             font=ctk.CTkFont(size=12),
             text_color=tema.TEXTO_SUAVE,
             anchor="e",
@@ -266,6 +266,22 @@ class FrameVacunas(ctk.CTkFrame):
         scroll = ctk.CTkScrollableFrame(self.tab_cargar, fg_color="transparent")
         scroll.pack(fill="both", expand=True, padx=6, pady=6)
 
+        intro = ctk.CTkFrame(
+            scroll,
+            fg_color=tema.CLARO,
+            corner_radius=tema.RADIO,
+            border_width=1,
+            border_color=tema.BORDE,
+        )
+        intro.pack(fill="x", pady=(0, 10))
+        ctk.CTkLabel(
+            intro,
+            text="Registrá vacuna y lote juntos, tal como llegan al CIC.",
+            font=ctk.CTkFont(size=13),
+            text_color=tema.OSCURO,
+            anchor="w",
+        ).pack(fill="x", padx=14, pady=10)
+
         seccion_vacuna = self._seccion(scroll, "1 · Datos de la vacuna")
         fila1 = ctk.CTkFrame(seccion_vacuna, fg_color="transparent")
         fila1.pack(fill="x", padx=12, pady=(4, 6))
@@ -287,7 +303,7 @@ class FrameVacunas(ctk.CTkFrame):
 
         ctk.CTkLabel(
             seccion_vacuna,
-            text="Si la vacuna ya existe, se reutiliza el catálogo y solo se agrega el lote.",
+            text="* Campos obligatorios",
             font=ctk.CTkFont(size=11),
             text_color=tema.TEXTO_SUAVE,
             anchor="w",
