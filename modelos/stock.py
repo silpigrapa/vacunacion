@@ -32,6 +32,7 @@ def obtener_stock_por_vacunatorio(id_vacunatorio: int = None):
         INNER JOIN VACUNA v ON l.id_vacuna = v.id_vacuna
         INNER JOIN VACUNATORIO vc ON a.id_vacunatorio_actual = vc.id_vacunatorio
         WHERE a.dosis_disponibles > 0
+          AND l.fecha_vencimiento >= date('now', 'localtime')
     """
 
     parametros = []
@@ -49,16 +50,22 @@ def obtener_stock_por_vacunatorio(id_vacunatorio: int = None):
 
 def obtener_resumen_stock(id_vacunatorio: int = None):
     """
-    Devuelve los totales de vacunas, ampollas y dosis disponibles.
+    Devuelve los totales de vacunas, ampollas y dosis disponibles (no vencidas)
+    y, por separado, las dosis vencidas.
     """
     conexion = obtener_conexion()
     try:
         cursor = conexion.cursor()
         sql = """
             SELECT
-                COUNT(DISTINCT l.id_vacuna) AS vacunas_con_stock,
-                COUNT(a.id_ampolla) AS ampollas_con_stock,
-                COALESCE(SUM(a.dosis_disponibles), 0) AS dosis_disponibles
+                COUNT(DISTINCT CASE WHEN l.fecha_vencimiento >= date('now', 'localtime')
+                                    THEN l.id_vacuna END) AS vacunas_con_stock,
+                COUNT(CASE WHEN l.fecha_vencimiento >= date('now', 'localtime')
+                           THEN a.id_ampolla END) AS ampollas_con_stock,
+                COALESCE(SUM(CASE WHEN l.fecha_vencimiento >= date('now', 'localtime')
+                                  THEN a.dosis_disponibles END), 0) AS dosis_disponibles,
+                COALESCE(SUM(CASE WHEN l.fecha_vencimiento < date('now', 'localtime')
+                                  THEN a.dosis_disponibles END), 0) AS dosis_vencidas
             FROM AMPOLLA a
             INNER JOIN LOTE l ON a.id_lote = l.id_lote
             WHERE a.dosis_disponibles > 0
@@ -165,9 +172,17 @@ def listar_stock_por_vacunatorio(id_vacunatorio: int = None):
                 v.id_vacuna,
                 v.nombre AS nombre_vacuna,
                 v.fabricante,
-                COUNT(a.id_ampolla) AS cantidad_ampollas,
-                SUM(a.dosis_disponibles) AS dosis_disponibles,
-                MIN(l.fecha_vencimiento) AS proximo_vencimiento
+                COUNT(CASE WHEN l.fecha_vencimiento >= date('now', 'localtime')
+                           THEN a.id_ampolla END) AS cantidad_ampollas,
+                COALESCE(SUM(CASE WHEN l.fecha_vencimiento >= date('now', 'localtime')
+                                  THEN a.dosis_disponibles END), 0) AS dosis_disponibles,
+                COALESCE(SUM(CASE WHEN l.fecha_vencimiento < date('now', 'localtime')
+                                  THEN a.dosis_disponibles END), 0) AS dosis_vencidas,
+                COALESCE(
+                    MIN(CASE WHEN l.fecha_vencimiento >= date('now', 'localtime')
+                             THEN l.fecha_vencimiento END),
+                    MIN(l.fecha_vencimiento)
+                ) AS proximo_vencimiento
             FROM AMPOLLA a
             INNER JOIN LOTE l ON a.id_lote = l.id_lote
             INNER JOIN VACUNA v ON l.id_vacuna = v.id_vacuna
