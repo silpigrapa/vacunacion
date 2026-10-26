@@ -23,12 +23,28 @@ TABLAS_AUDITADAS = {
 
 def _crear_trigger(tabla, clave, operacion):
     referencia = "OLD" if operacion == "DELETE" else "NEW"
+
+    # Si la clave tiene partes separadas por || (concatenación)
     if " || " in clave:
-        expresion_clave = " || ".join(
-            f"{referencia}.{columna.strip()}" for columna in clave.split("||")
-        )
+        partes = []
+        for token in clave.split("||"):
+            token_limpio = token.strip()
+            # Si el token es una cadena literal entre comillas (ej: ':'), no se le antecede OLD/NEW
+            if (token_limpio.startswith("'") and token_limpio.endswith("'")) or (
+                token_limpio.startswith('"') and token_limpio.endswith('"')
+            ):
+                partes.append(token_limpio)
+            elif token_limpio:
+                partes.append(f"{referencia}.{token_limpio}")
+        expresion_clave = " || ".join(partes)
     else:
-        expresion_clave = f"{referencia}.{clave}"
+        clave_limpia = clave.strip()
+        if (clave_limpia.startswith("'") and clave_limpia.endswith("'")) or (
+            clave_limpia.startswith('"') and clave_limpia.endswith('"')
+        ):
+            expresion_clave = clave_limpia
+        else:
+            expresion_clave = f"{referencia}.{clave_limpia}"
 
     nombre = f"trg_cambio_externo_{tabla.lower()}_{operacion.lower()}"
     return f"""
@@ -40,6 +56,17 @@ def _crear_trigger(tabla, clave, operacion):
             VALUES ('{tabla}', '{operacion}', CAST({expresion_clave} AS TEXT));
         END
     """
+
+
+def _limpiar_triggers_viejos(conexion):
+    """Elimina triggers de auditoría previos para asegurar que se reconstruyan correctamente."""
+    cursor = conexion.cursor()
+    cursor.execute(
+        "SELECT name FROM sqlite_master WHERE type = 'trigger' AND name LIKE 'trg_cambio_externo_%'"
+    )
+    triggers = [row[0] for row in cursor.fetchall()]
+    for trg in triggers:
+        cursor.execute(f'DROP TRIGGER IF EXISTS "{trg}"')
 
 
 def instalar_auditoria(conexion):
@@ -70,6 +97,9 @@ def instalar_auditoria(conexion):
         )
         """
     )
+
+    # Limpiar cualquier trigger mal formado guardado previamente en SQLite
+    _limpiar_triggers_viejos(conexion)
 
     tablas_existentes = {
         fila[0]

@@ -1,6 +1,7 @@
 """
 Vista del Módulo de Transferencias entre Vacunatorios.
-Permite emitir remitos de envío y consultar el detalle de transferencias realizadas.
+Permite emitir remitos de envío seleccionando vacunatorio de origen y destino,
+y consultar el detalle de transferencias realizadas.
 """
 
 import customtkinter as ctk
@@ -125,7 +126,13 @@ class VistaTransferencias(ctk.CTkFrame):
         for item in self.tabla_remitos.get_children():
             self.tabla_remitos.delete(item)
 
-        id_vac = self.usuario_logueado["id_vacunatorio"]
+        id_vac = None
+        if self.usuario_logueado:
+            try:
+                id_vac = self.usuario_logueado["id_vacunatorio"]
+            except (KeyError, IndexError, TypeError):
+                id_vac = None
+
         transferencias = listar_transferencias(id_vacunatorio=id_vac)
 
         for t in transferencias:
@@ -184,16 +191,15 @@ class VentanaNuevaTransferencia(ctk.CTkToplevel):
         self.usuario_logueado = usuario_logueado
 
         self.title("Emitir Nuevo Remito de Transferencia")
-        self.geometry("550x580")
+        self.geometry("620x650")
         self.resizable(False, False)
+
+        self.vacunatorios = listar_vacunatorios()
+        self.checkboxes_ampollas = []
 
         self._construir_formulario()
 
     def _obtener_siguiente_numero_remito(self):
-        """
-        Consulta en la base de datos la cantidad de transferencias
-        existentes para asignar el número correlativo de 8 dígitos arrancando en 00000001.
-        """
         conexion = obtener_conexion()
         cursor = conexion.cursor()
 
@@ -204,93 +210,153 @@ class VentanaNuevaTransferencia(ctk.CTkToplevel):
         total_remitos = resultado["total"] if resultado else 0
         siguiente_numero = total_remitos + 1
 
-        # Formato de 8 dígitos correlativo (ej: REM-00000001)
         return f"REM-{siguiente_numero:08d}"
 
-    def _obtener_ampollas_origen(self):
-        id_vac_origen = self.usuario_logueado["id_vacunatorio"]
-        return obtener_stock_por_vacunatorio(id_vacunatorio=id_vac_origen)
-
     def _construir_formulario(self):
-        # Número de remito sugerido (8 dígitos)
         nro_remito_sugerido = self._obtener_siguiente_numero_remito()
 
-        lbl_remito = ctk.CTkLabel(self, text="Número de Remito:")
-        lbl_remito.pack(anchor="w", padx=20, pady=(15, 2))
-        self.txt_remito = ctk.CTkEntry(self)
+        frame_top = ctk.CTkFrame(self, fg_color="transparent")
+        frame_top.pack(fill="x", padx=20, pady=(15, 5))
+
+        # Número de remito
+        lbl_remito = ctk.CTkLabel(frame_top, text="N° Remito:")
+        lbl_remito.grid(row=0, column=0, sticky="w", pady=2)
+        self.txt_remito = ctk.CTkEntry(frame_top, width=150)
         self.txt_remito.insert(0, nro_remito_sugerido)
-        self.txt_remito.pack(fill="x", padx=20)
+        self.txt_remito.grid(row=0, column=1, sticky="w", padx=(5, 20), pady=2)
 
-        # Destino
-        lbl_destino = ctk.CTkLabel(self, text="Vacunatorio Destino:")
-        lbl_destino.pack(anchor="w", padx=20, pady=(10, 2))
+        # Vacunatorio Origen
+        lbl_origen = ctk.CTkLabel(frame_top, text="Origen:")
+        lbl_origen.grid(row=1, column=0, sticky="w", pady=5)
 
-        self.vacunatorios = listar_vacunatorios()
-        opciones_dest = [
-            v["nombre"] for v in self.vacunatorios 
-            if v["id_vacunatorio"] != self.usuario_logueado["id_vacunatorio"]
-        ]
+        nombres_vac = [v["nombre"] for v in self.vacunatorios]
+        
+        id_usr_vac = None
+        if self.usuario_logueado:
+            try:
+                id_usr_vac = self.usuario_logueado["id_vacunatorio"]
+            except (KeyError, IndexError, TypeError):
+                id_usr_vac = None
 
-        self.combo_destino = ctk.CTkComboBox(self, values=opciones_dest or ["No hay otros vacunatorios"])
-        self.combo_destino.pack(fill="x", padx=20)
+        vac_usr = next((v["nombre"] for v in self.vacunatorios if v["id_vacunatorio"] == id_usr_vac), None)
+        origen_defecto = vac_usr if vac_usr else (nombres_vac[0] if nombres_vac else "")
 
-        # Selección de ampollas
-        lbl_ampollas = ctk.CTkLabel(self, text="Ampollas a Transferir (Disponibles en el centro actual):")
+        self.combo_origen = ctk.CTkComboBox(
+            frame_top, 
+            values=nombres_vac or ["Sin vacunatorios"],
+            width=230,
+            command=self._al_cambiar_origen
+        )
+        if origen_defecto:
+            self.combo_origen.set(origen_defecto)
+        self.combo_origen.grid(row=1, column=1, sticky="w", padx=(5, 20), pady=5)
+
+        # Vacunatorio Destino
+        lbl_destino = ctk.CTkLabel(frame_top, text="Destino:")
+        lbl_destino.grid(row=1, column=2, sticky="w", pady=5)
+
+        self.combo_destino = ctk.CTkComboBox(frame_top, values=[], width=230)
+        self.combo_destino.grid(row=1, column=3, sticky="w", pady=5)
+
+        # Sección de ampollas / stock
+        lbl_ampollas = ctk.CTkLabel(
+            self, 
+            text="Ampollas y Dosis Disponibles en Origen:",
+            font=ctk.CTkFont(weight="bold")
+        )
         lbl_ampollas.pack(anchor="w", padx=20, pady=(10, 2))
 
-        frame_lista = ctk.CTkFrame(self)
-        frame_lista.pack(fill="both", expand=True, padx=20, pady=5)
+        self.frame_lista = ctk.CTkFrame(self)
+        self.frame_lista.pack(fill="both", expand=True, padx=20, pady=5)
 
-        self.ampollas_disponibles = self._obtener_ampollas_origen()
-        self.checkboxes_ampollas = []
-
-        scroll_ampollas = ctk.CTkScrollableFrame(frame_lista, height=150)
-        scroll_ampollas.pack(fill="both", expand=True, padx=5, pady=5)
-
-        if not self.ampollas_disponibles:
-            ctk.CTkLabel(scroll_ampollas, text="No hay ampollas disponibles en este vacunatorio.").pack(pady=10)
-        else:
-            for amp in self.ampollas_disponibles:
-                var = ctk.BooleanVar()
-                # Se lee 'vacuna' de forma segura según el modelo de stock
-                nombre_vac = amp.get('vacuna') or amp.get('vacuna_nombre') or 'Vacuna'
-                texto_amp = (
-                    f"Ampolla #{amp['id_ampolla']} | {nombre_vac} "
-                    f"| Lote: {amp['numero_lote']} | Dosis: {amp['dosis_disponibles']}"
-                )
-                chk = ctk.CTkCheckBox(scroll_ampollas, text=texto_amp, variable=var)
-                chk.pack(anchor="w", pady=4, padx=5)
-                self.checkboxes_ampollas.append((amp['id_ampolla'], var))
+        self._actualizar_opciones_destino()
+        self._actualizar_lista_ampollas()
 
         # Observaciones
         lbl_obs = ctk.CTkLabel(self, text="Observaciones:")
         lbl_obs.pack(anchor="w", padx=20, pady=(10, 2))
-        self.txt_obs = ctk.CTkEntry(self, placeholder_text="Opcional: Motivo del traslado, transporte, etc.")
+        self.txt_obs = ctk.CTkEntry(self, placeholder_text="Opcional: Motivo del traslado, responsable de transporte, etc.")
         self.txt_obs.pack(fill="x", padx=20)
 
         # Botón Guardar
         btn_guardar = ctk.CTkButton(
-            self, text="Emitir Remito y Transferir", command=self._guardar
+            self, text="Emitir Remito y Transferir Stock", command=self._guardar
         )
         btn_guardar.pack(pady=15, padx=20, fill="x")
+
+    def _al_cambiar_origen(self, choice):
+        self._actualizar_opciones_destino()
+        self._actualizar_lista_ampollas()
+
+    def _actualizar_opciones_destino(self):
+        origen_sel = self.combo_origen.get()
+        opciones_dest = [v["nombre"] for v in self.vacunatorios if v["nombre"] != origen_sel]
+        self.combo_destino.configure(values=opciones_dest or ["Sin otros vacunatorios"])
+        if opciones_dest:
+            self.combo_destino.set(opciones_dest[0])
+
+    def _actualizar_lista_ampollas(self):
+        for widget in self.frame_lista.winfo_children():
+            widget.destroy()
+
+        origen_sel = self.combo_origen.get()
+        vac_origen = next((v for v in self.vacunatorios if v["nombre"] == origen_sel), None)
+
+        if not vac_origen:
+            return
+
+        ampollas = obtener_stock_por_vacunatorio(id_vacunatorio=vac_origen["id_vacunatorio"])
+        self.checkboxes_ampollas = []
+
+        scroll_ampollas = ctk.CTkScrollableFrame(self.frame_lista, height=200)
+        scroll_ampollas.pack(fill="both", expand=True, padx=5, pady=5)
+
+        if not ampollas:
+            ctk.CTkLabel(
+                scroll_ampollas, 
+                text=f"No hay ampollas disponibles en '{origen_sel}'."
+            ).pack(pady=15)
+        else:
+            for amp in ampollas:
+                var = ctk.BooleanVar()
+                
+                # Manejo seguro de llaves para evitar KeyError
+                nombre_vac = "Vacuna"
+                try:
+                    nombre_vac = amp["vacuna"]
+                except (KeyError, IndexError, TypeError):
+                    try:
+                        nombre_vac = amp["vacuna_nombre"]
+                    except (KeyError, IndexError, TypeError):
+                        pass
+
+                texto_amp = (
+                    f"Ampolla #{amp['id_ampolla']} | Vacuna: {nombre_vac} "
+                    f"| Lote: {amp['numero_lote']} | Dosis disponibles: {amp['dosis_disponibles']}"
+                )
+                chk = ctk.CTkCheckBox(scroll_ampollas, text=texto_amp, variable=var)
+                chk.pack(anchor="w", pady=5, padx=5)
+                self.checkboxes_ampollas.append((amp['id_ampolla'], var))
 
     def _guardar(self):
         from datetime import datetime
 
         num_remito = self.txt_remito.get().strip()
-        nombre_destino = self.combo_destino.get()
+        origen_nombre = self.combo_origen.get()
+        destino_nombre = self.combo_destino.get()
         obs = self.txt_obs.get().strip()
 
         if not num_remito:
             messagebox.showwarning("Atención", "Ingresá un número de remito.")
             return
 
-        vac_destino = next((v for v in self.vacunatorios if v["nombre"] == nombre_destino), None)
-        if not vac_destino:
-            messagebox.showwarning("Atención", "Seleccioná un vacunatorio de destino válido.")
+        vac_origen = next((v for v in self.vacunatorios if v["nombre"] == origen_nombre), None)
+        vac_destino = next((v for v in self.vacunatorios if v["nombre"] == destino_nombre), None)
+
+        if not vac_origen or not vac_destino:
+            messagebox.showwarning("Atención", "Seleccioná vacunatorios de origen y destino válidos.")
             return
 
-        # Seleccionar ampollas marcadas con cantidad por defecto = 1
         ampollas_a_enviar = [
             (id_amp, 1) for id_amp, var in self.checkboxes_ampollas if var.get()
         ]
@@ -305,16 +371,25 @@ class VentanaNuevaTransferencia(ctk.CTkToplevel):
             registrar_transferencia(
                 numero_remito=num_remito,
                 fecha=fecha_actual,
-                id_vacunatorio_origen=self.usuario_logueado["id_vacunatorio"],
+                id_vacunatorio_origen=vac_origen["id_vacunatorio"],
                 id_vacunatorio_destino=vac_destino["id_vacunatorio"],
                 id_usuario=self.usuario_logueado["id_usuario"],
                 lista_ampollas_con_cantidad=ampollas_a_enviar,
                 observaciones=obs,
             )
 
-            messagebox.showinfo("Éxito", f"Remito {num_remito} emitido correctamente.")
+            messagebox.showinfo(
+                "Éxito", 
+                f"Remito {num_remito} emitido correctamente.\n"
+                f"Origen: {origen_nombre} -> Destino: {destino_nombre}"
+            )
             self.parent_vista.cargar_transferencias()
             self.destroy()
 
         except Exception as e:
             messagebox.showerror("Error", f"No se pudo registrar la transferencia:\n{str(e)}")
+
+
+# --- ALIAS DE COMPATIBILIDAD ---
+FrameTransferencias = VistaTransferencias
+FrameTransferencia = VistaTransferencias

@@ -2,6 +2,7 @@
 Modelo de TRANSFERENCIA y TRANSFERENCIA_DETALLE.
 Maneja el registro de remitos de envío entre centros/vacunatorios
 y la consulta de transferencias con su detalle de ampollas.
+Aadaptado dinámicamente para soportar esquemas con o sin columna 'cantidad'.
 """
 
 from database.conexion import obtener_conexion
@@ -13,37 +14,31 @@ def registrar_transferencia(
     id_vacunatorio_origen: int,
     id_vacunatorio_destino: int,
     id_usuario: int,
-    lista_id_ampollas: list,
+    lista_ampollas_con_cantidad: list,
     observaciones: str = None,
 ):
     """
     Registra una nueva transferencia en la BD:
     1. Inserta la cabecera en TRANSFERENCIA.
-    2. Valida cada ampolla (existe y pertenece al origen) ANTES de tocarla.
-    3. Inserta cada ampolla en TRANSFERENCIA_DETALLE.
-    4. Actualiza el vacunatorio_actual de las ampollas en la tabla AMPOLLA.
-
-    Usa una transacción (commit al final o rollback si falla algo)
-    para garantizar la integridad de los datos.
-
-    Nota: la validación previa (paso 2) evita que una ampolla
-    inexistente dispare un sqlite3.IntegrityError (por la FOREIGN KEY
-    de TRANSFERENCIA_DETALLE hacia AMPOLLA) en vez del ValueError
-    claro que se quiere mostrar en la interfaz.
+    2. Inserta el detalle en TRANSFERENCIA_DETALLE (detecta si existe la columna 'cantidad').
+    3. Actualiza la ubicación de la ampolla en AMPOLLA (descuenta del origen y suma al destino).
     """
     if id_vacunatorio_origen == id_vacunatorio_destino:
-        raise ValueError(
-            "El vacunatorio de origen y destino no pueden ser el mismo."
-        )
+        raise ValueError("El vacunatorio de origen y destino no pueden ser el mismo.")
 
-    if not lista_id_ampollas:
+    if not lista_ampollas_con_cantidad:
         raise ValueError("Debe incluir al menos una ampolla en la transferencia.")
 
     conexion = obtener_conexion()
     cursor = conexion.cursor()
 
     try:
-        # 1) Insertar cabecera de la transferencia
+        # 1) Detectar si la tabla TRANSFERENCIA_DETALLE tiene la columna 'cantidad'
+        cursor.execute("PRAGMA table_info(TRANSFERENCIA_DETALLE);")
+        columnas = [col["name"] if isinstance(col, dict) else col[1] for col in cursor.fetchall()]
+        tiene_columna_cantidad = "cantidad" in columnas
+
+        # 2) Insertar cabecera de la transferencia
         cursor.execute(
             """
             INSERT INTO TRANSFERENCIA (
@@ -63,35 +58,31 @@ def registrar_transferencia(
         )
         id_transferencia = cursor.lastrowid
 
-        # 2) Insertar detalles y actualizar stock/ubicación de cada ampolla
-        for id_ampolla in lista_id_ampollas:
-            # Validar ANTES de insertar/actualizar, para distinguir
-            # "no existe" de "existe pero está en otro vacunatorio" y
-            # dar siempre un ValueError claro (nunca un error crudo de SQLite).
-            cursor.execute(
-                "SELECT id_vacunatorio_actual FROM AMPOLLA WHERE id_ampolla = ?",
-                (id_ampolla,),
-            )
-            fila_ampolla = cursor.fetchone()
+        # 3) Insertar en detalle según las columnas disponibles
+        for item in lista_ampollas_con_cantidad:
+            if isinstance(item, (list, tuple)):
+                id_ampolla, cantidad = item[0], item[1]
+            else:
+                id_ampolla, cantidad = item, 1
 
-            if fila_ampolla is None:
-                raise ValueError(f"La ampolla ID {id_ampolla} no existe.")
-
-            if fila_ampolla["id_vacunatorio_actual"] != id_vacunatorio_origen:
-                raise ValueError(
-                    f"La ampolla ID {id_ampolla} no pertenece al vacunatorio de origen."
+            if tiene_columna_cantidad:
+                cursor.execute(
+                    """
+                    INSERT INTO TRANSFERENCIA_DETALLE (id_transferencia, id_ampolla, cantidad)
+                    VALUES (?, ?, ?)
+                    """,
+                    (id_transferencia, id_ampolla, cantidad),
+                )
+            else:
+                cursor.execute(
+                    """
+                    INSERT INTO TRANSFERENCIA_DETALLE (id_transferencia, id_ampolla)
+                    VALUES (?, ?)
+                    """,
+                    (id_transferencia, id_ampolla),
                 )
 
-            # Insertar detalle
-            cursor.execute(
-                """
-                INSERT INTO TRANSFERENCIA_DETALLE (id_transferencia, id_ampolla)
-                VALUES (?, ?)
-                """,
-                (id_transferencia, id_ampolla),
-            )
-
-            # Cambiar de lugar la ampolla al vacunatorio destino
+            # Resta del stock de origen y suma al de destino actualizando la ubicación física
             cursor.execute(
                 """
                 UPDATE AMPOLLA
@@ -101,7 +92,6 @@ def registrar_transferencia(
                 (id_vacunatorio_destino, id_ampolla, id_vacunatorio_origen),
             )
 
-        # Confirmar la transacción
         conexion.commit()
         return id_transferencia
 
@@ -115,10 +105,6 @@ def registrar_transferencia(
 def listar_transferencias(id_vacunatorio: int = None):
     """
     Devuelve la lista de transferencias ordenadas por fecha descendente.
-    Incluye nombres del vacunatorio origen, destino y usuario que la realizó.
-
-    Si se pasa id_vacunatorio, filtra aquellas donde ese centro haya sido
-    origen o destino.
     """
     conexion = obtener_conexion()
     cursor = conexion.cursor()
@@ -152,51 +138,23 @@ def listar_transferencias(id_vacunatorio: int = None):
     return filas
 
 
-def obtener_transferencia_por_id(id_transferencia: int):
-    """
-    Devuelve la cabecera completa de una transferencia dada por su ID.
-    """
-    conexion = obtener_conexion()
-    cursor = conexion.cursor()
-
-    cursor.execute(
-        """
-        SELECT 
-            t.id_transferencia,
-            t.numero_remito,
-            t.fecha,
-            t.observaciones,
-            t.id_vacunatorio_origen,
-            t.id_vacunatorio_destino,
-            t.id_usuario,
-            vo.nombre AS origen,
-            vd.nombre AS destino,
-            (u.nombre || ' ' || u.apellido) AS usuario
-        FROM TRANSFERENCIA t
-        INNER JOIN VACUNATORIO vo ON t.id_vacunatorio_origen = vo.id_vacunatorio
-        INNER JOIN VACUNATORIO vd ON t.id_vacunatorio_destino = vd.id_vacunatorio
-        INNER JOIN USUARIO u ON t.id_usuario = u.id_usuario
-        WHERE t.id_transferencia = ?
-        """,
-        (id_transferencia,),
-    )
-
-    fila = cursor.fetchone()
-    conexion.close()
-    return fila
-
-
 def obtener_detalle_transferencia(id_transferencia: int):
     """
-    Devuelve la lista de ampollas/vacunas asociadas a un remito de transferencia.
+    Devuelve las ampollas asociadas a una transferencia.
     """
     conexion = obtener_conexion()
     cursor = conexion.cursor()
 
+    # Verificar si existe la columna 'cantidad' para incluirla en la consulta
+    cursor.execute("PRAGMA table_info(TRANSFERENCIA_DETALLE);")
+    columnas = [col["name"] if isinstance(col, dict) else col[1] for col in cursor.fetchall()]
+    col_cant = "td.cantidad" if "cantidad" in columnas else "1 AS cantidad"
+
     cursor.execute(
-        """
+        f"""
         SELECT 
             td.id_ampolla,
+            {col_cant},
             a.dosis_disponibles,
             a.fecha_apertura,
             l.numero_lote,
