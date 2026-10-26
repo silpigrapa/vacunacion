@@ -125,11 +125,14 @@ class FrameStock(ctk.CTkFrame):
 
         self.marco_resumen = ctk.CTkFrame(self, fg_color="transparent")
         self.marco_resumen.pack(fill="x", padx=2, pady=(0, 10))
-        self.marco_resumen.grid_columnconfigure((0, 1, 2), weight=1)
+        self.marco_resumen.grid_columnconfigure((0, 1, 2, 3), weight=1, uniform="tarjetas")
 
         self.tarjeta_vacunas = self._tarjeta_resumen(self.marco_resumen, 0, "Vacunas con stock")
         self.tarjeta_ampollas = self._tarjeta_resumen(self.marco_resumen, 1, "Ampollas disponibles")
         self.tarjeta_dosis = self._tarjeta_resumen(self.marco_resumen, 2, "Dosis disponibles")
+        self.tarjeta_vencidas = self._tarjeta_resumen(
+            self.marco_resumen, 3, "Dosis vencidas", color_valor=tema.ERROR
+        )
 
         self.pestanas = ctk.CTkTabview(
             self,
@@ -229,7 +232,7 @@ class FrameStock(ctk.CTkFrame):
                     return vacunatorio["nombre"]
         return nombres_vacunatorios[0] if nombres_vacunatorios else ""
 
-    def _tarjeta_resumen(self, padre, columna, titulo):
+    def _tarjeta_resumen(self, padre, columna, titulo, color_valor=None):
         tarjeta = ctk.CTkFrame(
             padre,
             fg_color=tema.FONDO_PANEL,
@@ -250,24 +253,33 @@ class FrameStock(ctk.CTkFrame):
             tarjeta,
             text="0",
             font=ctk.CTkFont(size=24, weight="bold"),
-            text_color=tema.OSCURO,
+            text_color=color_valor or tema.OSCURO,
         )
         etiqueta_valor.pack(anchor="w", padx=14, pady=(0, 12))
         return etiqueta_valor
 
     def _encabezado(self, padre, columnas):
-        fila = ctk.CTkFrame(padre, fg_color=tema.OSCURO, corner_radius=tema.RADIO, height=34)
+        fila = ctk.CTkFrame(
+            padre,
+            fg_color=tema.OSCURO,
+            bg_color=tema.OSCURO,
+            corner_radius=tema.RADIO_NULO,
+            border_width=0,
+            height=34,
+        )
         fila.pack(fill="x", pady=(0, 4))
-        fila.pack_propagate(False)
+        fila.grid_propagate(False)
 
-        for texto, peso in columnas:
+        for indice, (texto, peso) in enumerate(columnas):
+            fila.grid_columnconfigure(indice, weight=1, uniform="col")
             ctk.CTkLabel(
                 fila,
                 text=texto,
                 font=ctk.CTkFont(size=12, weight="bold"),
                 text_color="white",
+                fg_color=tema.OSCURO,  # [IA] mismo verde que el encabezado, en vez de "transparent"
                 anchor="w",
-            ).pack(side="left", fill="x", expand=(peso > 0), padx=10, pady=6)
+            ).grid(row=0, column=indice, sticky="ew", padx=10, pady=6)
 
     def _fila(self, padre, valores, alterna=False, color_texto=None):
         fila = ctk.CTkFrame(
@@ -279,16 +291,17 @@ class FrameStock(ctk.CTkFrame):
             height=36,
         )
         fila.pack(fill="x", pady=1)
-        fila.pack_propagate(False)
+        fila.grid_propagate(False)
 
-        for valor in valores:
+        for indice, valor in enumerate(valores):
+            fila.grid_columnconfigure(indice, weight=1, uniform="col")
             ctk.CTkLabel(
                 fila,
                 text=str(valor),
                 font=ctk.CTkFont(size=12),
                 text_color=color_texto or tema.TEXTO,
                 anchor="w",
-            ).pack(side="left", fill="x", expand=True, padx=10, pady=6)
+            ).grid(row=0, column=indice, sticky="ew", padx=10, pady=6)
 
     def _vacio(self, padre, mensaje):
         ctk.CTkLabel(
@@ -313,6 +326,7 @@ class FrameStock(ctk.CTkFrame):
         self.tarjeta_vacunas.configure(text=str(resumen_numerico["vacunas_con_stock"]))
         self.tarjeta_ampollas.configure(text=str(resumen_numerico["ampollas_con_stock"]))
         self.tarjeta_dosis.configure(text=str(resumen_numerico["dosis_disponibles"]))
+        self.tarjeta_vencidas.configure(text=str(resumen_numerico["dosis_vencidas"]))
 
         self._limpiar_contenedor(self.lista_resumen)
         filas = listar_stock_por_vacunatorio(id_vacunatorio)
@@ -322,6 +336,7 @@ class FrameStock(ctk.CTkFrame):
             ("Fabricante", 1),
             ("Ampollas", 1),
             ("Dosis disponibles", 1),
+            ("Dosis vencidas", 1),
             ("Próximo vencimiento", 1),
         )
 
@@ -333,6 +348,8 @@ class FrameStock(ctk.CTkFrame):
             for i, fila in enumerate(filas):
                 vencimiento = fila["proximo_vencimiento"] or "-"
                 color = tema.ERROR if (vencimiento != "-" and vencimiento < hoy) else None
+                if color is not None:
+                    vencimiento = "Vencidas"
                 self._fila(
                     self.lista_resumen,
                     (
@@ -340,6 +357,7 @@ class FrameStock(ctk.CTkFrame):
                         fila["fabricante"] or "-",
                         fila["cantidad_ampollas"],
                         fila["dosis_disponibles"],
+                        fila["dosis_vencidas"],
                         vencimiento,
                     ),
                     alterna=i % 2 == 1,
