@@ -7,11 +7,17 @@ Implementado como CTkFrame
 from datetime import datetime
 from pathlib import Path
 import sqlite3
-from tkinter import filedialog, messagebox
+from tkinter import TclError, filedialog, messagebox
 
 import customtkinter as ctk
 
-from database.conexion import RUTA_BD
+from database.auditoria import (
+    marcar_cambios_externos_notificados,
+    obtener_cambios_externos_pendientes,
+    verificar_auditoria,
+)
+from database.conexion import RUTA_BD, consumir_advertencias_auditoria_inicio
+from database.integridad import auditar_integridad
 from database.respaldo import crear_respaldo, restaurar_respaldo
 from vistas.transferencias import VistaTransferencias
 from vistas.vacunas import FrameVacunas
@@ -30,6 +36,7 @@ class FramePrincipal(ctk.CTkFrame):
         """
         super().__init__(master)
         self.usuario_logueado = usuario_logueado
+        self._faltantes_auditoria_mostrados = ()
         self._construir_widgets()
 
     def _construir_widgets(self):
@@ -56,6 +63,7 @@ class FramePrincipal(ctk.CTkFrame):
             ("Vacunatorios", self._ir_a_vacunatorios),
             ("Crear copia de seguridad", self._crear_copia_seguridad),
             ("Restaurar copia", self._restaurar_copia),
+            ("Verificar integridad", self._verificar_integridad),
         ]
 
         for texto, accion in opciones:
@@ -67,6 +75,7 @@ class FramePrincipal(ctk.CTkFrame):
         self.area_contenido.pack(side="left", fill="both", expand=True, padx=10, pady=10)
 
         self._mostrar_bienvenida()
+        self.after(1000, self._comprobar_cambios_externos)
 
     def _limpiar_area_contenido(self):
         for widget in self.area_contenido.winfo_children():
@@ -186,3 +195,103 @@ class FramePrincipal(ctk.CTkFrame):
             parent=self.winfo_toplevel(),
         )
         self.winfo_toplevel().mostrar_login()
+
+    def _verificar_integridad(self):
+        try:
+            hallazgos = auditar_integridad()
+        except (OSError, sqlite3.Error, ValueError) as error:
+            messagebox.showerror(
+                "No se pudo verificar la base de datos",
+                str(error),
+                parent=self.winfo_toplevel(),
+            )
+            return
+
+        if hallazgos:
+            messagebox.showwarning(
+                "Revisión de integridad",
+                "Se encontraron estos problemas:\n\n"
+                + "\n".join(f"- {hallazgo}" for hallazgo in hallazgos),
+                parent=self.winfo_toplevel(),
+            )
+            return
+
+        messagebox.showinfo(
+            "Revisión de integridad",
+            "La base de datos pasó las verificaciones físicas, relacionales "
+            "y de consistencia de los registros.",
+            parent=self.winfo_toplevel(),
+        )
+
+    def _comprobar_cambios_externos(self):
+        try:
+            if not self.winfo_exists():
+                return
+        except TclError:
+            return
+
+        try:
+            advertencias_inicio = consumir_advertencias_auditoria_inicio()
+            faltantes_auditoria = verificar_auditoria()
+            estado_auditoria = tuple(faltantes_auditoria)
+            if advertencias_inicio or (
+                faltantes_auditoria
+                and estado_auditoria != self._faltantes_auditoria_mostrados
+            ):
+                faltantes = list(dict.fromkeys(
+                    advertencias_inicio + faltantes_auditoria
+                ))
+                detalle = "\n".join(f"- {faltante}" for faltante in faltantes[:10])
+                if len(faltantes) > 10:
+                    detalle += f"\n- y {len(faltantes) - 10} elemento(s) más"
+                messagebox.showwarning(
+                    "Auditoría de la base de datos",
+                    "Se detectó que faltaban mecanismos de auditoría. "
+                    "Al iniciar, la aplicación intenta reinstalar los elementos "
+                    "ausentes, pero no se puede confirmar si hubo cambios durante el "
+                    "período en que estuvieron ausentes.\n\n"
+                    f"{detalle}",
+                    parent=self.winfo_toplevel(),
+                )
+            self._faltantes_auditoria_mostrados = estado_auditoria
+
+            auditoria_disponible = not any(
+                faltante.startswith("Falta la tabla ")
+                for faltante in faltantes_auditoria
+            )
+            cambios = (
+                obtener_cambios_externos_pendientes()
+                if auditoria_disponible
+                else []
+            )
+            if cambios:
+                marcar_cambios_externos_notificados(
+                    [cambio["id_cambio"] for cambio in cambios]
+                )
+                detalle = "\n".join(
+                    f"- {cambio['fecha']}: {cambio['operacion']} en "
+                    f"{cambio['tabla']} (registro {cambio['id_registro']})"
+                    for cambio in cambios[:20]
+                )
+                if len(cambios) > 20:
+                    detalle += f"\n- y {len(cambios) - 20} cambios más"
+                messagebox.showwarning(
+                    "Cambios externos en la base de datos",
+                    f"Se detectaron {len(cambios)} modificación(es) hechas "
+                    "fuera de la aplicación. Verificá la integridad de los "
+                    "registros.\n\n"
+                    f"{detalle}",
+                    parent=self.winfo_toplevel(),
+                )
+        except (OSError, sqlite3.Error, ValueError) as error:
+            messagebox.showerror(
+                "No se pudieron revisar cambios externos",
+                str(error),
+                parent=self.winfo_toplevel(),
+            )
+        finally:
+            try:
+                if self.winfo_exists():
+                    self.after(5000, self._comprobar_cambios_externos)
+            except TclError:
+                return

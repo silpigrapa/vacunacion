@@ -3,9 +3,9 @@ Modelo de VACUNA (el catálogo se genera dinámicamente).
 CRUD básico: crear, buscar por id, buscar por nombre, listar, actualizar.
 """
 
+from datetime import date
+
 from database.conexion import obtener_conexion
-from modelos.lote import crear_lote
-from modelos.ampolla import crear_ampolla
 
 
 def crear_vacuna(nombre, fabricante=None, dosis_requeridas=1, dosis_por_ampolla=1):
@@ -126,35 +126,80 @@ def registrar_ingreso_central(
     vacuna_nueva es True si la vacuna se creó en este llamado y False
     si ya existía en el catálogo.
     """
-    vacuna_existente = obtener_vacuna_por_nombre(nombre)
+    if not nombre or not nombre.strip():
+        raise ValueError("El nombre de la vacuna es obligatorio.")
+    if not numero_lote or not numero_lote.strip():
+        raise ValueError("El número de lote es obligatorio.")
+    if not all(
+        isinstance(valor, int) and not isinstance(valor, bool) and valor > 0
+        for valor in (dosis_requeridas, dosis_por_ampolla, cantidad_ampollas)
+    ):
+        raise ValueError("Dosis y cantidad de ampollas deben ser enteros positivos.")
+    try:
+        fecha_validada = date.fromisoformat(fecha_vencimiento)
+        if fecha_validada.isoformat() != fecha_vencimiento:
+            raise ValueError
+    except (TypeError, ValueError) as error:
+        raise ValueError("La fecha de vencimiento debe tener formato AAAA-MM-DD.") from error
 
-    if vacuna_existente is not None:
-        id_vacuna = vacuna_existente["id_vacuna"]
-        dosis_por_ampolla_efectiva = vacuna_existente["dosis_por_ampolla"]
-        vacuna_nueva = False
-    else:
-        id_vacuna = crear_vacuna(
-            nombre=nombre,
-            fabricante=fabricante,
-            dosis_requeridas=dosis_requeridas,
-            dosis_por_ampolla=dosis_por_ampolla,
+    conexion = obtener_conexion()
+    try:
+        cursor = conexion.cursor()
+        cursor.execute(
+            "SELECT id_vacuna, dosis_por_ampolla FROM VACUNA WHERE nombre = ?",
+            (nombre,),
         )
-        dosis_por_ampolla_efectiva = dosis_por_ampolla
-        vacuna_nueva = True
+        vacuna_existente = cursor.fetchone()
 
-    id_lote = crear_lote(
-        numero_lote=numero_lote,
-        fecha_vencimiento=fecha_vencimiento,
-        cantidad_ampollas=cantidad_ampollas,
-        id_vacuna=id_vacuna,
-        id_vacunatorio=id_vacunatorio,
-    )
+        if vacuna_existente is None:
+            cursor.execute(
+                """
+                INSERT INTO VACUNA (
+                    nombre, fabricante, dosis_requeridas, dosis_por_ampolla
+                ) VALUES (?, ?, ?, ?)
+                """,
+                (nombre, fabricante, dosis_requeridas, dosis_por_ampolla),
+            )
+            id_vacuna = cursor.lastrowid
+            dosis_por_ampolla_efectiva = dosis_por_ampolla
+            vacuna_nueva = True
+        else:
+            id_vacuna = vacuna_existente["id_vacuna"]
+            dosis_por_ampolla_efectiva = vacuna_existente["dosis_por_ampolla"]
+            vacuna_nueva = False
 
-    for _ in range(cantidad_ampollas):
-        crear_ampolla(
-            id_lote=id_lote,
-            id_vacunatorio_actual=id_vacunatorio,
-            dosis_disponibles=dosis_por_ampolla_efectiva,
+        cursor.execute(
+            """
+            INSERT INTO LOTE (
+                numero_lote, fecha_vencimiento, cantidad_ampollas,
+                id_vacuna, id_vacunatorio
+            ) VALUES (?, ?, ?, ?, ?)
+            """,
+            (
+                numero_lote,
+                fecha_vencimiento,
+                cantidad_ampollas,
+                id_vacuna,
+                id_vacunatorio,
+            ),
         )
+        id_lote = cursor.lastrowid
 
-    return id_lote, id_vacuna, vacuna_nueva
+        cursor.executemany(
+            """
+            INSERT INTO AMPOLLA (
+                id_lote, id_vacunatorio_actual, dosis_disponibles
+            ) VALUES (?, ?, ?)
+            """,
+            (
+                (id_lote, id_vacunatorio, dosis_por_ampolla_efectiva)
+                for _ in range(cantidad_ampollas)
+            ),
+        )
+        conexion.commit()
+        return id_lote, id_vacuna, vacuna_nueva
+    except Exception:
+        conexion.rollback()
+        raise
+    finally:
+        conexion.close()

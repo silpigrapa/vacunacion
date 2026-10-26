@@ -13,6 +13,7 @@ funciona también con bases de datos ya creadas.
 """
 
 from database.conexion import obtener_conexion
+from database.auditoria import asegurar_trigger_umbral
 
 UMBRAL_POR_DEFECTO = 10
 
@@ -27,6 +28,7 @@ def _asegurar_tabla(conexion):
         )
         """
     )
+    asegurar_trigger_umbral(conexion)
 
 
 def guardar_umbral(id_vacuna: int, umbral: int):

@@ -154,6 +154,14 @@ def restaurar_respaldo(ruta_respaldo, ruta_base=RUTA_BD):
         crear_respaldo(respaldo_previo, ruta_base=base)
         _preparar_base_para_reemplazo(base)
         os.replace(temporal, base)
+        from database.auditoria import instalar_auditoria
+
+        conexion = sqlite3.connect(base)
+        try:
+            instalar_auditoria(conexion)
+            conexion.commit()
+        finally:
+            conexion.close()
     finally:
         temporal.unlink(missing_ok=True)
 
