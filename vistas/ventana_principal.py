@@ -64,6 +64,7 @@ class FramePrincipal(ctk.CTkFrame):
             ("Crear copia de seguridad", self._crear_copia_seguridad),
             ("Restaurar copia", self._restaurar_copia),
             ("Verificar integridad", self._verificar_integridad),
+            ("Notificaciones", self._mostrar_bienvenida),
         ]
 
         for texto, accion in opciones:
@@ -120,6 +121,7 @@ class FramePrincipal(ctk.CTkFrame):
         self._limpiar_area_contenido()
         frame = FrameVacunatorios(self.area_contenido)
         frame.pack(fill="both", expand=True)
+    
 
     def _crear_copia_seguridad(self):
         nombre = f"sistema_vacunacion_{datetime.now():%Y%m%d_%H%M%S}.sqlite3"
