@@ -125,13 +125,13 @@ class FrameStock(ctk.CTkFrame):
 
         self.marco_resumen = ctk.CTkFrame(self, fg_color="transparent")
         self.marco_resumen.pack(fill="x", padx=2, pady=(0, 10))
-        self.marco_resumen.grid_columnconfigure((0, 1, 2, 3), weight=1, uniform="tarjetas")
+        self.marco_resumen.grid_columnconfigure((0, 1, 2, 3), weight=1)
 
         self.tarjeta_vacunas = self._tarjeta_resumen(self.marco_resumen, 0, "Vacunas con stock")
         self.tarjeta_ampollas = self._tarjeta_resumen(self.marco_resumen, 1, "Ampollas disponibles")
         self.tarjeta_dosis = self._tarjeta_resumen(self.marco_resumen, 2, "Dosis disponibles")
         self.tarjeta_vencidas = self._tarjeta_resumen(
-            self.marco_resumen, 3, "Dosis vencidas", color_valor=tema.ERROR
+            self.marco_resumen, 3, "Dosis vencidas"
         )
 
         self.pestanas = ctk.CTkTabview(
@@ -175,47 +175,63 @@ class FrameStock(ctk.CTkFrame):
                 return vacuna["id_vacuna"]
         return None
 
-    def _refrescar_comparativa(self):
-        for widget in self.marco_comparativa.winfo_children():
+    def _refrescar_comparativa(self, nombre_vacuna=None):
+        if not hasattr(self, "combo_vacuna_comparativa"):
+            fila = ctk.CTkFrame(self.marco_comparativa, fg_color="transparent")
+            fila.pack(fill="x", pady=(10, 15), padx=10)
+
+            ctk.CTkLabel(fila, text="Vacuna:").pack(side="left", padx=(0, 10))
+            self.combo_vacuna_comparativa = ctk.CTkComboBox(
+                fila,
+                values=[v["nombre"] for v in self.vacunas],
+                command=self._refrescar_comparativa,
+                state="readonly",
+                width=280,
+            )
+            self.combo_vacuna_comparativa.pack(side="left")
+            self.combo_vacuna_comparativa.set(self.vacunas[0]["nombre"])
+
+            self.resultados_comparativa = ctk.CTkFrame(
+                self.marco_comparativa, fg_color="transparent"
+            )
+            self.resultados_comparativa.pack(fill="x")
+
+        if nombre_vacuna is None:
+            nombre_vacuna = self.combo_vacuna_comparativa.get()
+        for widget in self.resultados_comparativa.winfo_children():
             widget.destroy()
 
-        fila = ctk.CTkFrame(self.marco_comparativa, fg_color="transparent")
-        fila.pack(fill="x", pady=(10, 15), padx=10)
-
-        ctk.CTkLabel(fila, text="Vacuna:").pack(side="left", padx=(0, 10))
-        self.combo_vacuna_comparativa = ctk.CTkComboBox(
-            fila,
-            values=[v["nombre"] for v in self.vacunas],
-            command=lambda _: self._refrescar_comparativa(),
-            state="readonly",
-            width=280,
-        )
-        self.combo_vacuna_comparativa.pack(side="left")
-        self.combo_vacuna_comparativa.set(self.vacunas[0]["nombre"])
-
-        id_vacuna = self._id_vacuna_por_nombre(self.combo_vacuna_comparativa.get())
+        id_vacuna = self._id_vacuna_por_nombre(nombre_vacuna)
         if id_vacuna is None:
             return
 
         filas = obtener_stock_por_vacunatorio(id_vacuna)
 
-        encabezado = ctk.CTkFrame(self.marco_comparativa, fg_color="transparent")
+        encabezado = ctk.CTkFrame(
+            self.resultados_comparativa, fg_color="transparent"
+        )
         encabezado.pack(fill="x", pady=(0, 5))
         ctk.CTkLabel(encabezado, text="Vacunatorio", font=ctk.CTkFont(weight="bold")).pack(
             side="left", padx=10
         )
-        ctk.CTkLabel(encabezado, text="Stock disponible", font=ctk.CTkFont(weight="bold")).pack(
-            side="right", padx=10
-        )
+        ctk.CTkLabel(
+            encabezado,
+            text="Ampollas disponibles · Dosis disponibles",
+            font=ctk.CTkFont(weight="bold"),
+        ).pack(side="right", padx=10)
 
         for fila_stock in filas:
-            fila_widget = ctk.CTkFrame(self.marco_comparativa)
+            fila_widget = ctk.CTkFrame(self.resultados_comparativa)
             fila_widget.pack(fill="x", pady=2)
             ctk.CTkLabel(fila_widget, text=fila_stock["nombre"]).pack(side="left", padx=10, pady=6)
 
-            color = "#b3261e" if fila_stock["stock"] == 0 else None
+            ampollas = fila_stock["ampollas_disponibles"]
+            dosis = fila_stock["dosis_disponibles"]
+            color = "#b3261e" if ampollas == 0 else None
             ctk.CTkLabel(
-                fila_widget, text=str(fila_stock["stock"]), text_color=color
+                fila_widget,
+                text=f"{ampollas} ampollas · {dosis} dosis",
+                text_color=color,
             ).pack(side="right", padx=10, pady=6)
 
     # ------------------------------------------------------------------
@@ -232,7 +248,7 @@ class FrameStock(ctk.CTkFrame):
                     return vacunatorio["nombre"]
         return nombres_vacunatorios[0] if nombres_vacunatorios else ""
 
-    def _tarjeta_resumen(self, padre, columna, titulo, color_valor=None):
+    def _tarjeta_resumen(self, padre, columna, titulo):
         tarjeta = ctk.CTkFrame(
             padre,
             fg_color=tema.FONDO_PANEL,
@@ -253,33 +269,24 @@ class FrameStock(ctk.CTkFrame):
             tarjeta,
             text="0",
             font=ctk.CTkFont(size=24, weight="bold"),
-            text_color=color_valor or tema.OSCURO,
+            text_color=tema.OSCURO,
         )
         etiqueta_valor.pack(anchor="w", padx=14, pady=(0, 12))
         return etiqueta_valor
 
     def _encabezado(self, padre, columnas):
-        fila = ctk.CTkFrame(
-            padre,
-            fg_color=tema.OSCURO,
-            bg_color=tema.OSCURO,
-            corner_radius=tema.RADIO_NULO,
-            border_width=0,
-            height=34,
-        )
+        fila = ctk.CTkFrame(padre, fg_color=tema.OSCURO, corner_radius=tema.RADIO, height=34)
         fila.pack(fill="x", pady=(0, 4))
-        fila.grid_propagate(False)
+        fila.pack_propagate(False)
 
-        for indice, (texto, peso) in enumerate(columnas):
-            fila.grid_columnconfigure(indice, weight=1, uniform="col")
+        for texto, peso in columnas:
             ctk.CTkLabel(
                 fila,
                 text=texto,
                 font=ctk.CTkFont(size=12, weight="bold"),
                 text_color="white",
-                fg_color=tema.OSCURO,  # [IA] mismo verde que el encabezado, en vez de "transparent"
                 anchor="w",
-            ).grid(row=0, column=indice, sticky="ew", padx=10, pady=6)
+            ).pack(side="left", fill="x", expand=(peso > 0), padx=10, pady=6)
 
     def _fila(self, padre, valores, alterna=False, color_texto=None):
         fila = ctk.CTkFrame(
@@ -291,17 +298,16 @@ class FrameStock(ctk.CTkFrame):
             height=36,
         )
         fila.pack(fill="x", pady=1)
-        fila.grid_propagate(False)
+        fila.pack_propagate(False)
 
-        for indice, valor in enumerate(valores):
-            fila.grid_columnconfigure(indice, weight=1, uniform="col")
+        for valor in valores:
             ctk.CTkLabel(
                 fila,
                 text=str(valor),
                 font=ctk.CTkFont(size=12),
                 text_color=color_texto or tema.TEXTO,
                 anchor="w",
-            ).grid(row=0, column=indice, sticky="ew", padx=10, pady=6)
+            ).pack(side="left", fill="x", expand=True, padx=10, pady=6)
 
     def _vacio(self, padre, mensaje):
         ctk.CTkLabel(

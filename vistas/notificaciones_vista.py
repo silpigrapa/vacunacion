@@ -15,7 +15,7 @@ import customtkinter as ctk
 from modelos.notificaciones import (
     listar_lotes_por_vencer,
     listar_stock_bajo,
-    listar_stock_con_umbral,
+    listar_umbrales_vacunas,
     guardar_umbral,
 )
 from vistas import tema
@@ -65,8 +65,8 @@ class FrameNotificaciones(ctk.CTkFrame):
 
         try:
             lotes = listar_lotes_por_vencer(self.id_vacunatorio)
-            stock_bajo = listar_stock_bajo(self.id_vacunatorio)
-            todas = listar_stock_con_umbral(self.id_vacunatorio)
+            stock_bajo = listar_stock_bajo()
+            todas = listar_umbrales_vacunas()
         except Exception as error:
             self._mensaje(f"No se pudieron cargar las notificaciones: {error}", COLOR_CRITICO)
             return
@@ -188,12 +188,14 @@ class FrameNotificaciones(ctk.CTkFrame):
             ).pack(side="right", padx=10, pady=6)
 
     # ------------------------------------------------------------------
-    # Sección 2: stock bajo (con umbral editable)
+    # Sección 2: alertas de stock bajo por vacunatorio
     # ------------------------------------------------------------------
     def _seccion_stock_bajo(self, filas):
         self._titulo_seccion("Stock bajo", len(filas))
         if not filas:
-            self._sin_novedades("Ninguna vacuna llegó a su umbral de alerta.")
+            self._sin_novedades(
+                "Ninguna vacuna llegó a su umbral en los vacunatorios registrados."
+            )
             return
         for fila in filas:
             self._fila_umbral(fila)
@@ -203,44 +205,25 @@ class FrameNotificaciones(ctk.CTkFrame):
         marco.pack(fill="x", pady=2)
 
         stock = fila["stock"]
-        en_alerta = stock <= fila["umbral"]
 
         ctk.CTkLabel(
             marco,
-            text=fila["vacuna"],
+            text=f"{fila['vacuna']} · {fila['vacunatorio']}",
             font=ctk.CTkFont(weight="bold"),
             text_color=tema.TEXTO,
         ).pack(side="left", padx=10, pady=6)
 
-        # Controles de edición del umbral (a la derecha)
-        boton = ctk.CTkButton(
-            marco, text="Guardar", width=70, height=28, corner_radius=tema.RADIO,
-            fg_color=tema.PRINCIPAL, hover_color=tema.HOVER,
-        )
-        boton.pack(side="right", padx=(4, 10), pady=6)
-
-        entrada = ctk.CTkEntry(marco, width=56, height=28, justify="center")
-        entrada.insert(0, str(fila["umbral"]))
-        entrada.pack(side="right", pady=6)
-
-        ctk.CTkLabel(
-            marco, text="Avisar con", text_color=tema.TEXTO_SUAVE,
-            font=ctk.CTkFont(size=12),
-        ).pack(side="right", padx=(10, 4), pady=6)
-
-        texto_stock = "Sin stock" if stock == 0 else f"Quedan {_plural(stock, 'ampolla', 'ampollas')}"
         ctk.CTkLabel(
             marco,
-            text=texto_stock,
-            text_color=(
-                COLOR_CRITICO if stock == 0 else COLOR_AVISO if en_alerta else tema.TEXTO_SUAVE
+            text=(
+                f"Sin stock utilizable (umbral: {fila['umbral']})"
+                if stock == 0
+                else f"Quedan {_plural(stock, 'ampolla', 'ampollas')} "
+                     f"(umbral: {fila['umbral']})"
             ),
-        ).pack(side="right", padx=10, pady=6)
-
-        boton.configure(
-            command=lambda f=fila, e=entrada: self._guardar_umbral(f, e)
-        )
-        entrada.bind("<Return>", lambda _evento, f=fila, e=entrada: self._guardar_umbral(f, e))
+            text_color=COLOR_CRITICO if stock == 0 else COLOR_AVISO,
+            font=ctk.CTkFont(size=12),
+        ).pack(side="right", padx=(10, 4), pady=6)
 
     def _guardar_umbral(self, fila, entrada):
         texto = entrada.get().strip()
@@ -287,10 +270,44 @@ class FrameNotificaciones(ctk.CTkFrame):
         if not self.config_visible:
             return
         if not todas:
-            self._sin_novedades("Todavía no hay vacunas con stock en este vacunatorio.")
+            self._sin_novedades("Todavía no hay vacunas en el catálogo para configurar.")
             return
         for fila in todas:
-            self._fila_umbral(fila)
+            self._fila_configuracion_umbral(fila)
+
+    def _fila_configuracion_umbral(self, fila):
+        marco = ctk.CTkFrame(self.cuerpo)
+        marco.pack(fill="x", pady=2)
+
+        ctk.CTkLabel(
+            marco,
+            text=fila["vacuna"],
+            font=ctk.CTkFont(weight="bold"),
+            text_color=tema.TEXTO,
+        ).pack(side="left", padx=10, pady=6)
+
+        boton = ctk.CTkButton(
+            marco, text="Guardar", width=70, height=28, corner_radius=tema.RADIO,
+            fg_color=tema.PRINCIPAL, hover_color=tema.HOVER,
+        )
+        boton.pack(side="right", padx=(4, 10), pady=6)
+
+        entrada = ctk.CTkEntry(marco, width=56, height=28, justify="center")
+        entrada.insert(0, str(fila["umbral"]))
+        entrada.pack(side="right", pady=6)
+
+        ctk.CTkLabel(
+            marco, text="Avisar con", text_color=tema.TEXTO_SUAVE,
+            font=ctk.CTkFont(size=12),
+        ).pack(side="right", padx=(10, 4), pady=6)
+
+        boton.configure(
+            command=lambda f=fila, e=entrada: self._guardar_umbral(f, e)
+        )
+        entrada.bind(
+            "<Return>",
+            lambda _evento, f=fila, e=entrada: self._guardar_umbral(f, e),
+        )
 
     def _alternar_configuracion(self):
         self.config_visible = not self.config_visible

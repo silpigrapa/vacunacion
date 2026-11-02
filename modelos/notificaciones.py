@@ -50,42 +50,48 @@ def guardar_umbral(id_vacuna: int, umbral: int):
         conexion.close()
 
 
-# Vacunas "relevantes" para un vacunatorio: las que tienen o tuvieron
-# ampollas ahí, o cuyos lotes ingresaron ahí (caso del vacunatorio central).
-# Así una vacuna que nunca pasó por un vacunatorio no genera alertas de "0".
+# Vacunas relevantes por vacunatorio: las que tienen ampollas allí o cuyos
+# lotes ingresaron allí. Así no se generan alertas de "0" en todos los centros.
 _SQL_STOCK_POR_VACUNA = """
     SELECT
         v.id_vacuna,
         v.nombre AS vacuna,
+        c.id_vacunatorio,
+        c.nombre AS vacunatorio,
         COALESCE((
             SELECT COUNT(*)
             FROM AMPOLLA a
             JOIN LOTE l ON a.id_lote = l.id_lote
             WHERE l.id_vacuna = v.id_vacuna
-              AND a.id_vacunatorio_actual = :vac
+              AND a.id_vacunatorio_actual = c.id_vacunatorio
               AND a.dosis_disponibles > 0
+              AND l.fecha_vencimiento >= date('now', 'localtime')
         ), 0) AS stock,
         COALESCE(u.umbral, :defecto) AS umbral
     FROM VACUNA v
+    JOIN VACUNATORIO c ON (:vac IS NULL OR c.id_vacunatorio = :vac)
     LEFT JOIN UMBRAL_STOCK u ON u.id_vacuna = v.id_vacuna
     WHERE EXISTS (
             SELECT 1 FROM AMPOLLA a JOIN LOTE l ON a.id_lote = l.id_lote
-            WHERE l.id_vacuna = v.id_vacuna AND a.id_vacunatorio_actual = :vac
+            WHERE l.id_vacuna = v.id_vacuna
+              AND a.id_vacunatorio_actual = c.id_vacunatorio
           )
        OR EXISTS (
             SELECT 1 FROM LOTE l
-            WHERE l.id_vacuna = v.id_vacuna AND l.id_vacunatorio = :vac
+            WHERE l.id_vacuna = v.id_vacuna
+              AND l.id_vacunatorio = c.id_vacunatorio
           )
 """
 
 
-def listar_stock_con_umbral(id_vacunatorio: int):
-    """Todas las vacunas relevantes del vacunatorio con su stock y su umbral."""
+def listar_stock_con_umbral(id_vacunatorio: int = None):
+    """Vacunas relevantes por centro, con stock vigente y umbral configurado."""
     conexion = obtener_conexion()
     try:
         _asegurar_tabla(conexion)
         cursor = conexion.execute(
-            _SQL_STOCK_POR_VACUNA + " ORDER BY v.nombre COLLATE NOCASE",
+            _SQL_STOCK_POR_VACUNA
+            + " ORDER BY v.nombre COLLATE NOCASE, c.nombre COLLATE NOCASE",
             {"vac": id_vacunatorio, "defecto": UMBRAL_POR_DEFECTO},
         )
         return cursor.fetchall()
@@ -93,12 +99,33 @@ def listar_stock_con_umbral(id_vacunatorio: int):
         conexion.close()
 
 
-def listar_stock_bajo(id_vacunatorio: int):
-    """Vacunas cuyo stock es menor o igual a su umbral (las más escasas primero)."""
+def listar_stock_bajo(id_vacunatorio: int = None):
+    """Centros cuya vacuna tiene stock menor o igual al umbral (más escasos primero)."""
     return sorted(
         (f for f in listar_stock_con_umbral(id_vacunatorio) if f["stock"] <= f["umbral"]),
         key=lambda f: (f["stock"] - f["umbral"], f["vacuna"].lower()),
     )
+
+
+def listar_umbrales_vacunas():
+    """Lista una vez cada vacuna para configurar su umbral común por centro."""
+    conexion = obtener_conexion()
+    try:
+        _asegurar_tabla(conexion)
+        return conexion.execute(
+            """
+            SELECT
+                v.id_vacuna,
+                v.nombre AS vacuna,
+                COALESCE(u.umbral, ?) AS umbral
+            FROM VACUNA v
+            LEFT JOIN UMBRAL_STOCK u ON u.id_vacuna = v.id_vacuna
+            ORDER BY v.nombre COLLATE NOCASE
+            """,
+            (UMBRAL_POR_DEFECTO,),
+        ).fetchall()
+    finally:
+        conexion.close()
 
 
 def listar_lotes_por_vencer(id_vacunatorio: int):

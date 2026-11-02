@@ -2,6 +2,7 @@
 
 Para arquitectura, ejecución local y mantenimiento de la base de datos,
 consultá la [documentación técnica para desarrolladores](./DESARROLLO.md).
+Para las tareas diarias, consultá el [manual de uso](./MANUAL_USUARIO.md).
 
 ## Copias de seguridad
 
@@ -14,7 +15,7 @@ sesión al terminar.
 
 Las copias incluyen los datos de la aplicación y pueden contener información
 personal. Es conveniente guardarlas en una ubicación protegida y en un
-dispositivo diferente del que contiene la base original. La aplicación| no
+dispositivo diferente del que contiene la base original. La aplicación no
 programa copias periódicas:
 es responsabilidad de quien la opera crear y conservar respaldos con la
 frecuencia adecuada.
@@ -27,3 +28,9 @@ fechas, cantidades de ampollas y dosis disponibles. La revisión es de solo
 lectura: informa hallazgos, pero no modifica ni corrige registros. El alta de
 vacunas, lotes y ampollas se guarda como una única transacción para evitar
 registros parciales ante un error.
+
+La aplicación también registra y alerta sobre cambios directos en la base de
+datos, comprueba que los mecanismos de auditoría estén instalados y avisa
+cuando el stock de una vacuna alcanza el umbral en cualquiera de los
+vacunatorios. Estas alertas no identifican a quien hizo los cambios ni
+protegen contra la manipulación deliberada de la propia base.

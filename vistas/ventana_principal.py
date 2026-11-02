@@ -110,7 +110,10 @@ class FramePrincipal(ctk.CTkFrame):
     # --- Placeholders para los módulos que faltan desarrollar ---
     def _ir_a_stock(self):
         self._limpiar_area_contenido()
-        frame = FrameStock(self.area_contenido)
+        frame = FrameStock(
+            self.area_contenido,
+            usuario_logueado=self.usuario_logueado,
+        )
         frame.pack(fill="both", expand=True)
 
     def _ir_a_vacunatorios(self):

@@ -85,6 +85,16 @@ integridad física de SQLite, esquema requerido, claves foráneas y reglas de
 consistencia de dominio. Devuelve una lista de hallazgos; una lista vacía
 significa que las comprobaciones implementadas pasaron. No repara datos.
 
+Las alertas de stock bajo se calculan por combinación de vacuna y vacunatorio,
+considerando ampollas vigentes con dosis disponibles. El umbral es único por
+vacuna y se evalúa independientemente para cada centro; la interfaz identifica
+el vacunatorio que alcanzó ese umbral.
+
+Las tarjetas y el listado de stock también cuentan solo lotes vigentes. La
+comparativa por vacunatorio reporta dos unidades explícitas: ampollas
+disponibles y dosis disponibles. El detalle individual conserva las ampollas
+vencidas para que puedan identificarse como tales.
+
 `crear_respaldo()` utiliza la API de respaldo de SQLite para producir una copia
 consistente, incluso si la base está en uso. Antes de restaurar,
 `restaurar_respaldo()` valida ambas bases, guarda una copia previa y reemplaza

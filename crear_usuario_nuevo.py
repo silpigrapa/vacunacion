@@ -3,27 +3,33 @@ Script rápido para restablecer o crear un nuevo usuario en la base de datos.
 """
 from database.conexion import inicializar_base_de_datos, obtener_conexion
 from modelos.usuario import crear_usuario
-from modelos.vacunatorio import listar_vacunatorios, crear_vacunatorio
+from modelos.vacunatorio import (
+    listar_vacunatorios,
+    crear_vacunatorio,
+    obtener_vacunatorio_central,
+)
 
 def registrar_nuevo():
     # Nos aseguramos de que existan las tablas
     inicializar_base_de_datos()
 
-    # 1. Verificar si hay al menos un vacunatorio en la BD
+    # 1. Asignar siempre al vacunatorio central.
     vacunatorios = listar_vacunatorios()
-    
     if not vacunatorios:
-        print("No hay vacunatorios en la BD. Creando uno por defecto...")
-        id_vacunatorio = crear_vacunatorio(
-            nombre="Centro Central CIC", 
-            direccion="Av. Principal 123", 
-            telefono="4444-1111", 
-            es_central=True
+        print("No hay vacunatorios en la BD. Creando el central...")
+        crear_vacunatorio(
+            nombre="CENTRO INTEGRADOR COMUNITARIO",
+            direccion="Pendiente de completar",
+            es_central=True,
         )
-    else:
-        # Asignamos al primer vacunatorio registrado (normalmente el central)
-        id_vacunatorio = vacunatorios[0]["id_vacunatorio"]
-        print(f"Asignando usuario al vacunatorio: {vacunatorios[0]['nombre']}")
+    vacunatorio_central = obtener_vacunatorio_central()
+    if vacunatorio_central is None:
+        raise RuntimeError(
+            "Hay vacunatorios cargados, pero ninguno está marcado como central. "
+            "Marcá el Centro Integrador Comunitario como central y volvé a intentar."
+        )
+    id_vacunatorio = vacunatorio_central["id_vacunatorio"]
+    print(f"Asignando usuario al vacunatorio central: {vacunatorio_central['nombre']}")
 
     # 2. Datos del nuevo usuario (cambiá usuario y contraseña si querés)
     nuevo_usuario = "admin"
@@ -40,8 +46,12 @@ def registrar_nuevo():
     if existe:
         clave_hash = hashear_contrasena(nueva_clave)
         cursor.execute(
-            "UPDATE USUARIO SET contrasena = ? WHERE usuario = ?",
-            (clave_hash, nuevo_usuario)
+            """
+            UPDATE USUARIO
+            SET contrasena = ?, id_vacunatorio = ?
+            WHERE usuario = ?
+            """,
+            (clave_hash, id_vacunatorio, nuevo_usuario),
         )
         conexion.commit()
         print(f"¡Contraseña actualizada correctamente para el usuario '{nuevo_usuario}'!")
