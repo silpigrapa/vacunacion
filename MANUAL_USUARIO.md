@@ -21,7 +21,8 @@ esta pantalla. El stock bajo se revisa por separado en todos los vacunatorios:
 si cualquiera llega al umbral, el aviso indica el centro correspondiente. El
 umbral se configura una vez por vacuna y se aplica a cada vacunatorio; el aviso
 se genera cuando quedan esa cantidad de ampollas o menos. También podés ocultar
-o volver a mostrar las notificaciones.
+o volver a mostrar las notificaciones. Para regresar a esta pantalla desde otro
+módulo, seleccioná **Notificaciones** en el menú lateral.
 
 ## Gestionar vacunas y registrar ingresos
 
