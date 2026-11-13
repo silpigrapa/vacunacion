@@ -2,7 +2,6 @@
 Modelo de TRANSFERENCIA y TRANSFERENCIA_DETALLE.
 Maneja el registro de remitos de envío entre centros/vacunatorios
 y la consulta de transferencias con su detalle de ampollas.
-Aadaptado dinámicamente para soportar esquemas con o sin columna 'cantidad'.
 """
 
 from database.conexion import obtener_conexion
@@ -20,10 +19,14 @@ def registrar_transferencia(
     """
     Registra una nueva transferencia en la BD:
     1. Inserta la cabecera en TRANSFERENCIA.
-    2. Inserta el detalle en TRANSFERENCIA_DETALLE (detecta si existe la columna 'cantidad').
-    3. Actualiza la ubicación de la ampolla en AMPOLLA (descuenta del origen y suma al destino).
+    2. Inserta el detalle en TRANSFERENCIA_DETALLE.
+    3. Mueve la ampolla física en la tabla AMPOLLA del vacunatorio origen al destino.
     """
-    if id_vacunatorio_origen == id_vacunatorio_destino:
+    id_origen = int(id_vacunatorio_origen)
+    id_destino = int(id_vacunatorio_destino)
+    id_usr = int(id_usuario)
+
+    if id_origen == id_destino:
         raise ValueError("El vacunatorio de origen y destino no pueden ser el mismo.")
 
     if not lista_ampollas_con_cantidad:
@@ -33,12 +36,17 @@ def registrar_transferencia(
     cursor = conexion.cursor()
 
     try:
-        # 1) Detectar si la tabla TRANSFERENCIA_DETALLE tiene la columna 'cantidad'
+        # 1) Detectar columnas de TRANSFERENCIA_DETALLE
         cursor.execute("PRAGMA table_info(TRANSFERENCIA_DETALLE);")
-        columnas = [col["name"] if isinstance(col, dict) else col[1] for col in cursor.fetchall()]
-        tiene_columna_cantidad = "cantidad" in columnas
+        cols_det = [col["name"] if isinstance(col, dict) else col[1] for col in cursor.fetchall()]
+        tiene_columna_cantidad = "cantidad" in cols_det
 
-        # 2) Insertar cabecera de la transferencia
+        # 2) Detectar el nombre exacto de la columna de ubicación en AMPOLLA
+        cursor.execute("PRAGMA table_info(AMPOLLA);")
+        cols_amp = [col["name"] if isinstance(col, dict) else col[1] for col in cursor.fetchall()]
+        col_ubicacion = "id_vacunatorio_actual" if "id_vacunatorio_actual" in cols_amp else "id_vacunatorio"
+
+        # 3) Insertar cabecera de la transferencia
         cursor.execute(
             """
             INSERT INTO TRANSFERENCIA (
@@ -50,20 +58,22 @@ def registrar_transferencia(
             (
                 numero_remito,
                 fecha,
-                id_vacunatorio_origen,
-                id_vacunatorio_destino,
-                id_usuario,
+                id_origen,
+                id_destino,
+                id_usr,
                 observaciones,
             ),
         )
         id_transferencia = cursor.lastrowid
 
-        # 3) Insertar en detalle según las columnas disponibles
+        # 4) Insertar en detalle y actualizar ubicación de cada ampolla
         for item in lista_ampollas_con_cantidad:
             if isinstance(item, (list, tuple)):
-                id_ampolla, cantidad = item[0], item[1]
+                id_ampolla = int(item[0])
+                cantidad = int(item[1])
             else:
-                id_ampolla, cantidad = item, 1
+                id_ampolla = int(item)
+                cantidad = 1
 
             if tiene_columna_cantidad:
                 cursor.execute(
@@ -82,15 +92,20 @@ def registrar_transferencia(
                     (id_transferencia, id_ampolla),
                 )
 
-            # Resta del stock de origen y suma al de destino actualizando la ubicación física
+            # Mover la ampolla del CAP origen al CAP destino
             cursor.execute(
-                """
+                f"""
                 UPDATE AMPOLLA
-                SET id_vacunatorio_actual = ?
-                WHERE id_ampolla = ? AND id_vacunatorio_actual = ?
+                SET {col_ubicacion} = ?
+                WHERE id_ampolla = ? AND {col_ubicacion} = ?
                 """,
-                (id_vacunatorio_destino, id_ampolla, id_vacunatorio_origen),
+                (id_destino, id_ampolla, id_origen),
             )
+
+            if cursor.rowcount == 0:
+                raise RuntimeError(
+                    f"No se pudo mover la ampolla #{id_ampolla}: no se encontró disponible en el centro de origen."
+                )
 
         conexion.commit()
         return id_transferencia
@@ -127,7 +142,7 @@ def listar_transferencias(id_vacunatorio: int = None):
     parametros = []
     if id_vacunatorio is not None:
         sql += " WHERE t.id_vacunatorio_origen = ? OR t.id_vacunatorio_destino = ?"
-        parametros.extend([id_vacunatorio, id_vacunatorio])
+        parametros.extend([int(id_vacunatorio), int(id_vacunatorio)])
 
     sql += " ORDER BY t.fecha DESC"
 
@@ -145,7 +160,6 @@ def obtener_detalle_transferencia(id_transferencia: int):
     conexion = obtener_conexion()
     cursor = conexion.cursor()
 
-    # Verificar si existe la columna 'cantidad' para incluirla en la consulta
     cursor.execute("PRAGMA table_info(TRANSFERENCIA_DETALLE);")
     columnas = [col["name"] if isinstance(col, dict) else col[1] for col in cursor.fetchall()]
     col_cant = "td.cantidad" if "cantidad" in columnas else "1 AS cantidad"
@@ -166,7 +180,7 @@ def obtener_detalle_transferencia(id_transferencia: int):
         INNER JOIN VACUNA v ON l.id_vacuna = v.id_vacuna
         WHERE td.id_transferencia = ?
         """,
-        (id_transferencia,),
+        (int(id_transferencia),),
     )
 
     filas = cursor.fetchall()
