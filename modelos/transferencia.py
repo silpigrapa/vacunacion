@@ -97,14 +97,23 @@ def registrar_transferencia(
                 f"""
                 UPDATE AMPOLLA
                 SET {col_ubicacion} = ?
-                WHERE id_ampolla = ? AND {col_ubicacion} = ?
+                WHERE id_ampolla = ?
+                  AND {col_ubicacion} = ?
+                  AND dosis_disponibles > 0
+                  AND EXISTS (
+                      SELECT 1
+                      FROM LOTE l
+                      WHERE l.id_lote = AMPOLLA.id_lote
+                        AND l.fecha_vencimiento >= date('now', 'localtime')
+                  )
                 """,
                 (id_destino, id_ampolla, id_origen),
             )
 
             if cursor.rowcount == 0:
                 raise RuntimeError(
-                    f"No se pudo mover la ampolla #{id_ampolla}: no se encontró disponible en el centro de origen."
+                    f"No se pudo mover la ampolla #{id_ampolla}: no está disponible, "
+                    "no tiene dosis, está vencida o no pertenece al centro de origen."
                 )
 
         conexion.commit()

@@ -90,7 +90,8 @@ habitual.
 
 En **Transferencias**, presioná **Nueva Transferencia (Emitir Remito)**.
 Completá el número de remito, elegí el vacunatorio de destino, seleccioná las
-ampollas disponibles para enviar y, si hace falta, agregá observaciones.
+ampollas vigentes con dosis disponibles para enviar y, si hace falta, agregá
+observaciones. Las ampollas vencidas o agotadas no se pueden transferir.
 Presioná **Emitir Remito y Transferir** para confirmar el movimiento.
 
 La tabla superior muestra los remitos relacionados con el vacunatorio de la

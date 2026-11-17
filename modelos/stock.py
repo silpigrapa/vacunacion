@@ -32,6 +32,7 @@ def obtener_stock_por_vacunatorio(id_vacunatorio: int = None):
         INNER JOIN VACUNA v ON l.id_vacuna = v.id_vacuna
         INNER JOIN VACUNATORIO vc ON a.id_vacunatorio_actual = vc.id_vacunatorio
         WHERE a.dosis_disponibles > 0
+          AND l.fecha_vencimiento >= date('now', 'localtime')
     """
 
     parametros = []
