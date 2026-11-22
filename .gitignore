@@ -15,3 +15,7 @@ env/
 
 # Sistema
 .DS_Store
+
+#Archivos extras
+remitos/
+.pdf
