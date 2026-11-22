@@ -4,6 +4,10 @@ Permite emitir remitos de envío seleccionando vacunatorio de origen y destino,
 y consultar el detalle de transferencias realizadas.
 """
 
+import os
+import subprocess
+import sys
+
 import customtkinter as ctk
 from tkinter import ttk, messagebox
 from database.conexion import obtener_conexion
@@ -14,6 +18,33 @@ from modelos.transferencia import (
 )
 from modelos.vacunatorio import listar_vacunatorios
 from modelos.stock import obtener_stock_por_vacunatorio
+
+
+def _abrir_archivo(ruta):
+    """Abre un archivo con la aplicación predeterminada del sistema."""
+    try:
+        if sys.platform.startswith("win"):
+            os.startfile(ruta)
+        elif sys.platform == "darwin":
+            subprocess.Popen(["open", ruta])
+        else:
+            subprocess.Popen(["xdg-open", ruta])
+    except Exception as e:
+        messagebox.showwarning("Atención", f"No se pudo abrir el PDF automáticamente:\n{e}")
+
+
+def _generar_pdf_remito(id_transferencia):
+    """
+    Genera el PDF del remito y devuelve su ruta. Si falla, muestra una
+    advertencia y devuelve None (la transferencia ya quedó guardada).
+    """
+    try:
+        from modelos.remito_pdf import generar_remito_pdf
+
+        return generar_remito_pdf(id_transferencia)
+    except Exception as e:
+        messagebox.showwarning("Atención", f"No se pudo generar el PDF del remito:\n{e}")
+    return None
 
 
 class VistaTransferencias(ctk.CTkFrame):
@@ -46,6 +77,13 @@ class VistaTransferencias(ctk.CTkFrame):
             command=self._abrir_modal_nueva_transferencia
         )
         btn_nueva.pack(side="right")
+
+        btn_pdf = ctk.CTkButton(
+            frame_cabecera,
+            text="Generar PDF del remito seleccionado",
+            command=self._generar_pdf_seleccionado
+        )
+        btn_pdf.pack(side="right", padx=(0, 10))
 
         # 2. Tabla Principal: Cabeceras de Remito
         frame_tabla_remitos = ctk.CTkFrame(self)
@@ -177,6 +215,17 @@ class VistaTransferencias(ctk.CTkFrame):
                     estado_ampolla,
                 )
             )
+
+    def _generar_pdf_seleccionado(self):
+        seleccion = self.tabla_remitos.selection()
+        if not seleccion:
+            messagebox.showwarning("Atención", "Seleccioná un remito de la tabla.")
+            return
+
+        id_transferencia = self.tabla_remitos.item(seleccion[0])["values"][0]
+        ruta = _generar_pdf_remito(id_transferencia)
+        if ruta:
+            _abrir_archivo(ruta)
 
     def _abrir_modal_nueva_transferencia(self):
         modal = VentanaNuevaTransferencia(self, self.usuario_logueado)
@@ -368,7 +417,7 @@ class VentanaNuevaTransferencia(ctk.CTkToplevel):
         fecha_actual = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
         try:
-            registrar_transferencia(
+            id_transferencia = registrar_transferencia(
                 numero_remito=num_remito,
                 fecha=fecha_actual,
                 id_vacunatorio_origen=vac_origen["id_vacunatorio"],
@@ -378,13 +427,22 @@ class VentanaNuevaTransferencia(ctk.CTkToplevel):
                 observaciones=obs,
             )
 
-            messagebox.showinfo(
-                "Éxito", 
+            # La transferencia ya quedó guardada: ahora se genera el PDF del remito.
+            ruta_pdf = _generar_pdf_remito(id_transferencia)
+
+            mensaje = (
                 f"Remito {num_remito} emitido correctamente.\n"
                 f"Origen: {origen_nombre} -> Destino: {destino_nombre}"
             )
+            if ruta_pdf:
+                mensaje += f"\n\nPDF guardado en:\n{ruta_pdf}"
+
+            messagebox.showinfo("Éxito", mensaje)
             self.parent_vista.cargar_transferencias()
             self.destroy()
+
+            if ruta_pdf:
+                _abrir_archivo(ruta_pdf)
 
         except Exception as e:
             messagebox.showerror("Error", f"No se pudo registrar la transferencia:\n{str(e)}")

@@ -195,3 +195,37 @@ def obtener_detalle_transferencia(id_transferencia: int):
     filas = cursor.fetchall()
     conexion.close()
     return filas
+
+
+def obtener_transferencia(id_transferencia: int):
+    """
+    Devuelve la cabecera de una transferencia (con datos de origen y destino)
+    o None si no existe.
+    """
+    conexion = obtener_conexion()
+    cursor = conexion.cursor()
+
+    cursor.execute(
+        """
+        SELECT
+            t.id_transferencia,
+            t.numero_remito,
+            t.fecha,
+            t.observaciones,
+            vo.nombre AS origen,
+            vo.direccion AS origen_direccion,
+            vd.nombre AS destino,
+            vd.direccion AS destino_direccion,
+            (u.nombre || ' ' || u.apellido) AS usuario
+        FROM TRANSFERENCIA t
+        INNER JOIN VACUNATORIO vo ON t.id_vacunatorio_origen = vo.id_vacunatorio
+        INNER JOIN VACUNATORIO vd ON t.id_vacunatorio_destino = vd.id_vacunatorio
+        INNER JOIN USUARIO u ON t.id_usuario = u.id_usuario
+        WHERE t.id_transferencia = ?
+        """,
+        (int(id_transferencia),),
+    )
+
+    fila = cursor.fetchone()
+    conexion.close()
+    return fila
